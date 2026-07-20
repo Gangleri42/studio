@@ -1,0 +1,10 @@
+# CI drift-check artifact (regenerated glyphs.js, never committed).
+glyphs.gen.js
+
+# Pages build output.
+dist/
+
+# Cruft.
+.DS_Store
+__pycache__/
+*.pyc

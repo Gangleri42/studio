@@ -1,0 +1,58 @@
+# Publish SeedHammer Studio to GitHub Pages. The editor is the site root
+# (gangleri42.github.io/studio/); the plain-text composer sits under
+# /textplate/. Both are self-contained static apps whose glyphs.js is
+# committed and checked against the firmware source by glyphs-drift.yml,
+# so this job only copies files — no Go, WASM, or other toolchain build.
+name: "Pages: Studio + text composer"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialise Pages deploys but never cancel an in-flight one — losing the
+# upload between artifact assembly and deploy is worse than queue time.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Assemble Pages tree
+        run: |
+          set -euo pipefail
+          mkdir -p dist/textplate
+
+          # SeedHammer Studio editor at the site root. Only the named app
+          # files ship — repo meta (README, workflows, .gitignore) stays off
+          # the published site.
+          cp index.html glyphs.js sw.js manifest.webmanifest \
+             icon.svg icon-192.png icon-512.png icon-maskable.png dist/
+
+          # Plain-text composer under /textplate/.
+          cp textplate/index.html textplate/glyphs.js dist/textplate/
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
