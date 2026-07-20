@@ -71,7 +71,7 @@ body::before {
   -webkit-backdrop-filter: blur(22px) saturate(1.5);
   border: 1px solid var(--stroke); box-shadow: var(--shadow);
 }
-.app { height: 100%; display: grid; grid-template-rows: auto 1fr;
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr auto;
   gap: 16px; padding: 16px; max-width: 1280px; margin: 0 auto; }
 
 /* top bar */
@@ -89,6 +89,11 @@ body::before {
 .install { appearance: none; border: 1px solid var(--hair); background: transparent; color: var(--muted);
   font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 11px; cursor: pointer; display: none; }
 .install.show { display: inline-block; }
+/* pack nav: repo, firmware download, boot-key guide */
+.nav { justify-content: center; gap: 10px 22px; flex-wrap: wrap; padding: 9px 14px; }
+.nav a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500;
+  transition: color .2s; }
+.nav a:hover { color: var(--ink); }
 
 /* main */
 main { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.05fr); gap: 16px; min-height: 0; }
@@ -227,6 +232,12 @@ Keep *offline*. Verify _keys_.
       </div>
     </section>
   </main>
+
+  <footer class="bar glass nav">
+    <a href="https://github.com/Gangleri42/seedhammer" target="_blank" rel="noopener">Repo</a>
+    <a href="https://github.com/Gangleri42/seedhammer/releases/latest" target="_blank" rel="noopener">Download firmware</a>
+    <a href="https://github.com/Gangleri42/seedhammer/blob/main/docs/howto-bootkey.md" target="_blank" rel="noopener">Boot-key guide</a>
+  </footer>
 </div>
 
 <div id="sandbox" style="position:absolute;left:-99999px;top:0;width:1000px;height:1000px;overflow:hidden" aria-hidden="true"></div>
