@@ -157,9 +157,14 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-monospace, monospace;
   background: var(--glass-2); border: 1px solid var(--hair); border-radius: 10px; padding: 9px; color: var(--muted); }
 /* SeedHammer emulator tab: the device screen spans the whole main grid */
-.device { grid-column: 1 / -1; align-items: center; justify-content: center; }
+/* scroll the whole device view when its content (screen + controls + plate SVG)
+   is taller than the fixed-height panel, instead of clipping it top and bottom.
+   margin-block:auto centers when there's room but collapses on overflow, unlike
+   justify-content:center which would make the top unreachable by scroll. */
+.device { grid-column: 1 / -1; align-items: center; justify-content: flex-start;
+  overflow-y: auto; overflow-x: hidden; padding: 4px; }
 .deviceStage { display: flex; flex-direction: column; align-items: center; gap: 18px;
-  width: 100%; max-width: 520px; }
+  width: 100%; max-width: 520px; margin-block: auto; }
 #emuScreen { image-rendering: pixelated; width: 100%; max-width: 480px; aspect-ratio: 480 / 320;
   background: #05070a; border-radius: 12px; touch-action: none; cursor: grab;
   border: 1px solid var(--stroke); box-shadow: var(--shadow); }
@@ -174,8 +179,9 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
   padding: 5px 12px; border-radius: 9px; border: 1px solid var(--hair); background: var(--glass-2);
   color: var(--ink); cursor: pointer; }
 .plateHead button:active { transform: scale(.97); }
-.plateSvg { border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; background: #eceef2; }
-.plateSvg img { display: block; width: 100%; height: auto; }
+.plateSvg { border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; background: #eceef2;
+  display: grid; place-items: center; padding: 8px; }
+.plateSvg img { display: block; max-width: 100%; max-height: 46vh; width: auto; height: auto; }
 /* Coldcard: an original device frame (no Coinkite product photos). */
 .ccBody { width: 300px; max-width: 100%; background: linear-gradient(160deg, #26292f, #15171b);
   border: 1px solid var(--hair); border-radius: 22px; padding: 20px 20px 24px;
