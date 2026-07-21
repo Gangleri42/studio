@@ -667,7 +667,7 @@ function bridgeMsg(j){switch(j.status){
   case 'busy':return 'Reader busy — try again';
   default:return 'Send failed: '+(j.detail||j.error||'unknown');}}
 document.getElementById('send').onclick=async()=>{
-  if(bridgeUp){status('Tap the SeedHammer on the reader…');
+  if(bridgeUp){status('Hold the reader against the SeedHammer…');
     try{const r=await fetch(BRIDGE+'/bridge/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payload})});
       status(bridgeMsg(await r.json()));}catch(e){status('Bridge: '+e.message);}
     return;}
