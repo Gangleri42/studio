@@ -1,0 +1,668 @@
+diff --git a/ngu/aes.c b/ngu/aes.c
+index 3bdb3e3..d53515e 100644
+--- a/ngu/aes.c
++++ b/ngu/aes.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ //
+ // aes.c - Basic AES, not PEP-272
+ //
+@@ -49,7 +53,7 @@ STATIC mp_obj_t s_CBC_make_new(const mp_obj_type_t *type, size_t n_args, size_t
+     // args: is_encrypt, key, iv?
+     mp_arg_check_num(n_args, n_kw, 3, 3, false);
+ 
+-    mp_obj_CBC_t *o = m_new_obj_with_finaliser(mp_obj_CBC_t);
++    mp_obj_CBC_t *o = m_malloc_with_finaliser(sizeof(mp_obj_CBC_t));
+     o->base.type = type;
+ 
+     o->is_encrypt = !!mp_obj_get_int_truncated(args[0]);
+@@ -70,7 +74,7 @@ STATIC mp_obj_t s_CTR_make_new(const mp_obj_type_t *type, size_t n_args, size_t
+     // args: key, nonce
+     mp_arg_check_num(n_args, n_kw, 1, 2, false);
+ 
+-    mp_obj_CTR_t *o = m_new_obj_with_finaliser(mp_obj_CTR_t);
++    mp_obj_CTR_t *o = m_malloc_with_finaliser(sizeof(mp_obj_CTR_t));
+     o->base.type = type;
+ 
+     _aes_setup(&o->aes_ctx, args[0]);
+@@ -111,7 +115,7 @@ STATIC mp_obj_t s_CBC_cipher(mp_obj_t self_in, mp_obj_t buf_in)
+         cf_cbc_decrypt(&self->mode_ctx, buf.buf, (uint8_t *)rv.buf, buf.len/CF_MAXBLOCK);
+     }
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv);
++    return mp_obj_new_bytes_from_vstr(&rv);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_2(s_CBC_cipher_obj, s_CBC_cipher);
+ 
+@@ -129,7 +133,7 @@ STATIC mp_obj_t s_CTR_cipher(mp_obj_t self_in, mp_obj_t buf_in)
+     // any size i/o works
+     cf_ctr_cipher(&self->mode_ctx, buf.buf, (uint8_t *)rv.buf, buf.len);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv);
++    return mp_obj_new_bytes_from_vstr(&rv);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_2(s_CTR_cipher_obj, s_CTR_cipher);
+ 
+@@ -147,7 +151,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(s_CBC_blank_obj, s_CBC_blank);
+ STATIC mp_obj_t s_CBC_copy(mp_obj_t self_in) {
+     mp_obj_CBC_t *self = MP_OBJ_TO_PTR(self_in);
+ 
+-    mp_obj_CBC_t *rv = m_new_obj_with_finaliser(mp_obj_CBC_t);
++    mp_obj_CBC_t *rv = m_malloc_with_finaliser(sizeof(mp_obj_CBC_t));
+     *rv = *self;
+     rv->base.type = &s_CBC_type;
+     
+@@ -169,7 +173,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(s_CTR_blank_obj, s_CTR_blank);
+ STATIC mp_obj_t s_CTR_copy(mp_obj_t self_in) {
+     mp_obj_CTR_t *self = MP_OBJ_TO_PTR(self_in);
+ 
+-    mp_obj_CTR_t *rv = m_new_obj_with_finaliser(mp_obj_CTR_t);
++    mp_obj_CTR_t *rv = m_malloc_with_finaliser(sizeof(mp_obj_CTR_t));
+     *rv = *self;
+     rv->base.type = &s_CTR_type;
+     
+@@ -186,12 +190,13 @@ STATIC const mp_rom_map_elem_t s_CBC_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(s_CBC_locals_dict, s_CBC_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t s_CBC_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_CBC,
+-    .make_new = s_CBC_make_new,
+-    .locals_dict = (void *)&s_CBC_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_CBC_type,
++    MP_QSTR_CBC,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_CBC_make_new,
++    locals_dict, &s_CBC_locals_dict
++);
+ 
+ STATIC const mp_rom_map_elem_t s_CTR_locals_dict_table[] = {
+     { MP_ROM_QSTR(MP_QSTR_cipher), MP_ROM_PTR(&s_CTR_cipher_obj) },
+@@ -201,12 +206,13 @@ STATIC const mp_rom_map_elem_t s_CTR_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(s_CTR_locals_dict, s_CTR_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t s_CTR_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_CTR,
+-    .make_new = s_CTR_make_new,
+-    .locals_dict = (void *)&s_CTR_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_CTR_type,
++    MP_QSTR_CTR,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_CTR_make_new,
++    locals_dict, &s_CTR_locals_dict
++);
+ 
+ 
+ STATIC const mp_rom_map_elem_t mp_module_aes_globals_table[] = {
+diff --git a/ngu/cert.c b/ngu/cert.c
+index 9269544..7e9aedc 100644
+--- a/ngu/cert.c
++++ b/ngu/cert.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ //
+ // cert.c - x.509 certificate parsing (limited)
+ //
+@@ -31,7 +35,7 @@ typedef struct {
+ STATIC mp_obj_t cert_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+     mp_arg_check_num(n_args, n_kw, 0, 0, false);
+ 
+-    mp_obj_cert_t *o = m_new_obj_with_finaliser(mp_obj_cert_t);
++    mp_obj_cert_t *o = m_malloc_with_finaliser(sizeof(mp_obj_cert_t));
+     o->base.type = type;
+ 
+     mbedtls_x509_crt_init(&o->mcert);
+@@ -116,7 +120,7 @@ STATIC mp_obj_t get_ec_pubkey(mp_obj_t self_in)
+ 
+     assert(actual == 65);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(get_ec_pubkey_obj, get_ec_pubkey);
+ 
+@@ -140,13 +144,14 @@ STATIC const mp_rom_map_elem_t cert_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(cert_locals_dict, cert_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t cert_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_x509_cert,
+-    .print = cert_print,
+-    .make_new = cert_make_new,
+-    .locals_dict = (void *)&cert_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    cert_type,
++    MP_QSTR_x509_cert,
++    MP_TYPE_FLAG_NONE,
++    print, cert_print,
++    make_new, cert_make_new,
++    locals_dict, &cert_locals_dict
++);
+ 
+ STATIC const mp_rom_map_elem_t globals_table[] = {
+     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_cert) },
+diff --git a/ngu/codecs.c b/ngu/codecs.c
+index e9868db..1f2b952 100644
+--- a/ngu/codecs.c
++++ b/ngu/codecs.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ // 
+ // codecs - missing codecs: b32, b58
+ //
+diff --git a/ngu/ec.c b/ngu/ec.c
+index 8ee8db9..f8293b9 100644
+--- a/ngu/ec.c
++++ b/ngu/ec.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ //
+ // ec.c - elyptical curve stuff, but only a few "useful" curves
+ //
+@@ -35,7 +39,7 @@ typedef struct _mp_obj_curve_t {
+ STATIC mp_obj_t curve_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+     mp_arg_check_num(n_args, n_kw, 1, 1, false);
+ 
+-    mp_obj_curve_t *o = m_new_obj_with_finaliser(mp_obj_curve_t);
++    mp_obj_curve_t *o = m_malloc_with_finaliser(sizeof(mp_obj_curve_t));
+     o->base.type = type;
+     mbedtls_ecp_group_init(&o->grp);
+ 
+@@ -95,7 +99,7 @@ STATIC mp_obj_t curve_sign(mp_obj_t self_in, mp_obj_t privkey_in, mp_obj_t diges
+     mbedtls_mpi_free(&r);
+     mbedtls_mpi_free(&s);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_3(curve_sign_obj, curve_sign);
+ 
+@@ -165,12 +169,13 @@ STATIC const mp_rom_map_elem_t curve_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(curve_locals_dict, curve_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t modngu_ec_curve_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_ec_curve,
+-    .make_new = curve_make_new,
+-    .locals_dict = (void *)&curve_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    modngu_ec_curve_type,
++    MP_QSTR_ec_curve,
++    MP_TYPE_FLAG_NONE,
++    make_new, curve_make_new,
++    locals_dict, &curve_locals_dict
++);
+ 
+ STATIC const mp_rom_map_elem_t mp_module_ec_globals_table[] = {
+     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_ec) },
+diff --git a/ngu/hash.c b/ngu/hash.c
+index 829bd75..7b0bb37 100644
+--- a/ngu/hash.c
++++ b/ngu/hash.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ //
+ // hash.c - hash functions
+ //
+@@ -47,13 +51,13 @@ STATIC mp_obj_t modngu_hash_sha512_update(mp_obj_t self_in, mp_obj_t arg);
+ STATIC mp_obj_t modngu_hash_sha512_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+     mp_arg_check_num(n_args, n_kw, 0, 1, false);
+ #if MICROPY_SSL_MBEDTLS
+-    mp_obj_hash_t *o = m_new_obj_var(mp_obj_hash_t, char, sizeof(mbedtls_sha512_context));
++    mp_obj_hash_t *o = m_new_obj_var(mp_obj_hash_t, state, char, sizeof(mbedtls_sha512_context));
+     o->base.type = type;
+ 
+     mbedtls_sha512_init((mbedtls_sha512_context *)o->state);
+     mbedtls_sha512_starts_ret((mbedtls_sha512_context *)o->state, false);
+ #else
+-    mp_obj_hash_t *o = m_new_obj_var(mp_obj_hash_t, char, sizeof(cf_sha512_context));
++    mp_obj_hash_t *o = m_new_obj_var(mp_obj_hash_t, state, char, sizeof(cf_sha512_context));
+     o->base.type = type;
+     cf_sha512_init((cf_sha512_context *)o->state);
+ #endif
+@@ -92,7 +96,7 @@ STATIC mp_obj_t modngu_hash_sha512_digest(mp_obj_t self_in) {
+     cf_sha512_digest_final((cf_sha512_context *)self->state, (byte *)vstr.buf);
+ #endif
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ 
+ STATIC MP_DEFINE_CONST_FUN_OBJ_2(modngu_hash_sha512_update_obj, modngu_hash_sha512_update);
+@@ -104,12 +108,13 @@ STATIC const mp_rom_map_elem_t modngu_hash_sha512_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(modngu_hash_sha512_locals_dict, modngu_hash_sha512_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t modngu_hash_sha512_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_sha512,
+-    .make_new = modngu_hash_sha512_make_new,
+-    .locals_dict = (void *)&modngu_hash_sha512_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    modngu_hash_sha512_type,
++    MP_QSTR_sha512,
++    MP_TYPE_FLAG_NONE,
++    make_new, modngu_hash_sha512_make_new,
++    locals_dict, &modngu_hash_sha512_locals_dict
++);
+ 
+ // Tagged sha256 = SHA256(SHA256(tag)||SHA256(tag)||msg)
+ STATIC mp_obj_t hm_tagged_sha256(size_t n_args, const mp_obj_t *args) {
+@@ -143,7 +148,7 @@ STATIC mp_obj_t hm_tagged_sha256(size_t n_args, const mp_obj_t *args) {
+     vstr_init_len(&res, 32);
+     sha256_single(ser, ser_len, (uint8_t *)res.buf);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &res);
++    return mp_obj_new_bytes_from_vstr(&res);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(hm_tagged_sha256_obj,2,3, hm_tagged_sha256);
+ 
+@@ -157,7 +162,7 @@ STATIC mp_obj_t hm_double_sha256(mp_obj_t arg) {
+ 
+     sha256_double(inp.buf, inp.len, (uint8_t *)vstr.buf);
+     
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(hm_double_sha256_obj, hm_double_sha256);
+ 
+@@ -172,7 +177,7 @@ STATIC mp_obj_t hm_single_sha256(mp_obj_t arg) {
+ 
+     sha256_single(inp.buf, inp.len, (uint8_t *)vstr.buf);
+     
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(hm_single_sha256_obj, hm_single_sha256);
+ 
+@@ -193,7 +198,7 @@ STATIC mp_obj_t hm_single_ripemd160(mp_obj_t arg) {
+ #endif
+     ripemd160(inp.buf, inp.len, (uint8_t *)vstr.buf);
+     
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(hm_single_ripemd160_obj, hm_single_ripemd160);
+ 
+@@ -206,7 +211,7 @@ STATIC mp_obj_t hm_hash160(mp_obj_t arg) {
+ 
+     hash160(inp.buf, inp.len, (uint8_t *)vstr.buf);
+     
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(hm_hash160_obj, hm_hash160);
+ 
+@@ -281,7 +286,7 @@ STATIC mp_obj_t pbkdf2_sha512(mp_obj_t pass_in, mp_obj_t salt_in, mp_obj_t round
+ 	explicit_bzero(obuf, sizeof(obuf));
+ */
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &key_out);
++    return mp_obj_new_bytes_from_vstr(&key_out);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_3(pbkdf2_sha512_obj, pbkdf2_sha512);
+ 
+diff --git a/ngu/hdnode.c b/ngu/hdnode.c
+index 5bfd840..99f0d2a 100644
+--- a/ngu/hdnode.c
++++ b/ngu/hdnode.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ // 
+ // hdnode - BIP32 HD keys
+ //
+@@ -94,7 +98,7 @@ static uint32_t _calc_my_fp(mp_obj_hdnode_t *self)
+ // Constructor: makes empty/invalid obj
+ STATIC mp_obj_t s_hdnode_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+     mp_arg_check_num(n_args, n_kw, 0, 0, false);
+-    mp_obj_hdnode_t *o = m_new_obj_with_finaliser(mp_obj_hdnode_t);
++    mp_obj_hdnode_t *o = m_malloc_with_finaliser(sizeof(mp_obj_hdnode_t));
+ 
+     memset(o, 0, sizeof(mp_obj_hdnode_t));
+     o->base.type = type;
+@@ -110,7 +114,7 @@ STATIC mp_obj_t s_hdnode_copy(mp_obj_t self_in) {
+     mp_obj_hdnode_t *self = MP_OBJ_TO_PTR(self_in);
+     raise_on_invalid(self);         // debatable, but isolates faults faster
+ 
+-    mp_obj_hdnode_t *rv = m_new_obj_with_finaliser(mp_obj_hdnode_t);
++    mp_obj_hdnode_t *rv = m_malloc_with_finaliser(sizeof(mp_obj_hdnode_t));
+     *rv = *self;
+     rv->base.type = &s_hdnode_type;
+     
+@@ -141,7 +145,7 @@ STATIC mp_obj_t s_hdnode_privkey(mp_obj_t self_in) {
+     }
+     memcpy(vstr.buf, self->privkey, 32);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(s_hdnode_privkey_obj, s_hdnode_privkey);
+ 
+@@ -156,7 +160,7 @@ STATIC mp_obj_t s_hdnode_pubkey(mp_obj_t self_in) {
+     // 33 bytes of pubkey
+     memcpy(vstr.buf, self->pubkey, sizeof(self->pubkey));
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(s_hdnode_pubkey_obj, s_hdnode_pubkey);
+ 
+@@ -539,7 +543,7 @@ STATIC mp_obj_t s_hdnode_chain_code(mp_obj_t self_in) {
+     vstr_init_len(&vstr, 32);
+     memcpy(vstr.buf, self->chain_code, 32);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(s_hdnode_chain_code_obj, s_hdnode_chain_code);
+ 
+@@ -591,15 +595,24 @@ STATIC const mp_rom_map_elem_t s_hdnode_locals_dict_table[] = {
+ STATIC MP_DEFINE_CONST_DICT(s_hdnode_locals_dict, s_hdnode_locals_dict_table);
+ 
+ // class: HDNode
+-STATIC const mp_obj_type_t s_hdnode_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_HDNode,
+-    .make_new = s_hdnode_make_new,
+ #ifdef EXTRA_DEBUG
+-    .print = s_hdnode_repr,
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_hdnode_type,
++    MP_QSTR_HDNode,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_hdnode_make_new,
++    print, s_hdnode_repr,
++    locals_dict, &s_hdnode_locals_dict
++);
++#else
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_hdnode_type,
++    MP_QSTR_HDNode,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_hdnode_make_new,
++    locals_dict, &s_hdnode_locals_dict
++);
+ #endif
+-    .locals_dict = (void *)&s_hdnode_locals_dict,
+-};
+ 
+ STATIC const mp_rom_map_elem_t globals_table[] = {
+     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_hdnode) },
+diff --git a/ngu/hm.c b/ngu/hm.c
+index c1196a8..900e8fe 100644
+--- a/ngu/hm.c
++++ b/ngu/hm.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ //
+ // hm.c - HMAC, some common ones only; not flexible
+ //
+@@ -75,7 +79,7 @@ STATIC mp_obj_t hmac_X(int md_size, mp_obj_t key_in, mp_obj_t msg_in)
+     cf_hmac(key.buf, key.len, msg.buf, msg.len, (uint8_t*)rv_out.buf, algo);
+ #endif
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv_out);
++    return mp_obj_new_bytes_from_vstr(&rv_out);
+ }
+ 
+ STATIC mp_obj_t hmac_sha512(mp_obj_t key_in, mp_obj_t msg_in)
+diff --git a/ngu/k1.c b/ngu/k1.c
+index 91c5db7..0fba361 100644
+--- a/ngu/k1.c
++++ b/ngu/k1.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ // 
+ // secp256k1 - the Bitcoin curve
+ //
+@@ -18,7 +22,7 @@
+ #if MICROPY_SSL_MBEDTLS
+ #include "mbedtls/sha256.h"
+ #else
+-#include "extmod/crypto-algorithms/sha256.h"
++#include "sha256_compat.h"
+ #endif
+ 
+ typedef struct  {
+@@ -204,7 +208,7 @@ STATIC mp_obj_t s_pubkey_to_bytes(size_t n_args, const mp_obj_t *args) {
+             compressed ? SECP256K1_EC_COMPRESSED: SECP256K1_EC_UNCOMPRESSED );
+ 
+     vstr.len = outlen;
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(s_pubkey_to_bytes_obj, 1, 2, s_pubkey_to_bytes);
+ 
+@@ -217,7 +221,7 @@ STATIC mp_obj_t s_xonly_pubkey_to_bytes(size_t n_args, const mp_obj_t *args) {
+ 
+     secp256k1_xonly_pubkey_serialize(secp256k1_context_static, (uint8_t *)vstr.buf, &self->pubkey);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(s_xonly_pubkey_to_bytes_obj, 1, 2, s_xonly_pubkey_to_bytes);
+ 
+@@ -270,7 +274,7 @@ STATIC mp_obj_t s_sig_to_bytes(mp_obj_t self_in) {
+     // - always compressed
+     vstr.buf[0] = 27 + recid + 4;
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &vstr);
++    return mp_obj_new_bytes_from_vstr(&vstr);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(s_sig_to_bytes_obj, s_sig_to_bytes);
+ 
+@@ -410,7 +414,7 @@ STATIC mp_obj_t s_sign_schnorr(mp_obj_t privkey_in, mp_obj_t digest_in, mp_obj_t
+         mp_raise_ValueError(MP_ERROR_TEXT("secp256k1_schnorrsig_sign"));
+     }
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv);
++    return mp_obj_new_bytes_from_vstr(&rv);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_3(s_sign_schnorr_obj, s_sign_schnorr);
+ 
+@@ -583,7 +587,7 @@ STATIC mp_obj_t s_keypair_ecdh_multiply(mp_obj_t self_in, mp_obj_t other_point_i
+         mp_raise_ValueError(MP_ERROR_TEXT("secp256k1_ecdh"));
+     }
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv);
++    return mp_obj_new_bytes_from_vstr(&rv);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_2(s_keypair_ecdh_multiply_obj, s_keypair_ecdh_multiply);
+ 
+@@ -595,12 +599,13 @@ STATIC const mp_rom_map_elem_t s_sig_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(s_sig_locals_dict, s_sig_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t s_sig_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_secp256k1_sig,
+-    .make_new = s_sig_make_new,
+-    .locals_dict = (void *)&s_sig_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_sig_type,
++    MP_QSTR_secp256k1_sig,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_sig_make_new,
++    locals_dict, &s_sig_locals_dict
++);
+ 
+ 
+ // pubkeys and what you can do with them
+@@ -616,19 +621,21 @@ STATIC const mp_rom_map_elem_t s_xonly_pubkey_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(s_xonly_pubkey_locals_dict, s_xonly_pubkey_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t s_pubkey_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_secp256k1_pubkey,
+-    .make_new = s_pubkey_make_new,
+-    .locals_dict = (void *)&s_pubkey_locals_dict,
+-};
+-
+-STATIC const mp_obj_type_t s_xonly_pubkey_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_secp256k1_xonly_pubkey,
+-    .make_new = s_xonly_pubkey_make_new,
+-    .locals_dict = (void *)&s_xonly_pubkey_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_pubkey_type,
++    MP_QSTR_secp256k1_pubkey,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_pubkey_make_new,
++    locals_dict, &s_pubkey_locals_dict
++);
++
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_xonly_pubkey_type,
++    MP_QSTR_secp256k1_xonly_pubkey,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_xonly_pubkey_make_new,
++    locals_dict, &s_xonly_pubkey_locals_dict
++);
+ 
+ // privkeys and what you can do with them
+ STATIC const mp_rom_map_elem_t s_keypair_locals_dict_table[] = {
+@@ -640,12 +647,13 @@ STATIC const mp_rom_map_elem_t s_keypair_locals_dict_table[] = {
+ };
+ STATIC MP_DEFINE_CONST_DICT(s_keypair_locals_dict, s_keypair_locals_dict_table);
+ 
+-STATIC const mp_obj_type_t s_keypair_type = {
+-    { &mp_type_type },
+-    .name = MP_QSTR_secp256k1_keypair,
+-    .make_new = s_keypair_make_new,
+-    .locals_dict = (void *)&s_keypair_locals_dict,
+-};
++STATIC MP_DEFINE_CONST_OBJ_TYPE(
++    s_keypair_type,
++    MP_QSTR_secp256k1_keypair,
++    MP_TYPE_FLAG_NONE,
++    make_new, s_keypair_make_new,
++    locals_dict, &s_keypair_locals_dict
++);
+ 
+ 
+ STATIC const mp_rom_map_elem_t globals_table[] = {
+diff --git a/ngu/micropython.mk b/ngu/micropython.mk
+index baf48c8..b9db39c 100644
+--- a/ngu/micropython.mk
++++ b/ngu/micropython.mk
+@@ -12,9 +12,9 @@ FROZEN_MANIFEST += $(NGU_TOP_DIR)/ngu/manifest.py
+ 
+ %/lib_secp256k1.o: \
+ 	CFLAGS_USERMOD += -I$(NGU_TOP_DIR)/libs/secp256k1/src -I$(NGU_TOP_DIR)/libs/secp256k1 \
+-						-Wno-unused-function -Wno-nonnull-compare
++						-Wno-unused-function -Wno-error=unused-function
+ 
+-%/lib_segwit.o: CFLAGS += -Wno-return-type
++%/lib_segwit.o: CFLAGS += -Wno-return-type -Wno-error=return-type
+
+ ifdef NGU_NEEDS_CIFRA
+
+@@ -21,7 +21,12 @@ ifdef NGU_NEEDS_CIFRA
+ CFLAGS_USERMOD += -DNGU_INCL_AES=1
+
+ CIFRA_SRC = $(NGU_TOP_DIR)/libs/cifra/src
+-CIFRA_CFLAGS = $(CFLAGS) -DFULL_FAT_ASSERT -I$(NGU_TOP_DIR)/libs/cifra/src \
++# Swap -std=c99 -> -std=gnu99 for the cifra hack-compile only. cifra's
++# handy.h SWAP/ER macros use the GNU 'typeof' keyword (not the portable
++# '__typeof__'), which strict-C99 emcc/clang rejects with 'undeclared
++# function typeof'. gnu99 = c99 + GNU extensions; still strict enough to
++# surface real bugs.
++CIFRA_CFLAGS = $(filter-out -std=c99,$(CFLAGS)) -std=gnu99 -DFULL_FAT_ASSERT -I$(NGU_TOP_DIR)/libs/cifra/src \
+ 					-I$(NGU_TOP_DIR)/libs/cifra/src/ext
+ CIFRA_PARTS = hmac.o sha1.o sha3.o sha256.o sha512.o pbkdf2.o chash.o blockwise.o \
+ 				aes.o modes.o
+diff --git a/ngu/modngu.c b/ngu/modngu.c
+index a5090c1..cb5121c 100644
+--- a/ngu/modngu.c
++++ b/ngu/modngu.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ //
+ // mod NgU
+ //
+@@ -55,6 +59,6 @@ const mp_obj_module_t mp_module_ngu = {
+     .globals = (mp_obj_dict_t *)&mp_module_ngu_globals,
+ };
+ 
+-MP_REGISTER_MODULE(MP_QSTR_ngu, mp_module_ngu, 1);
++MP_REGISTER_MODULE(MP_QSTR_ngu, mp_module_ngu);
+ 
+ 
+diff --git a/ngu/random.c b/ngu/random.c
+index 1fc2232..a361136 100644
+--- a/ngu/random.c
++++ b/ngu/random.c
+@@ -1,3 +1,7 @@
++#ifndef STATIC
++#define STATIC static
++#endif
++
+ // 
+ // random - RNG stuff
+ //
+@@ -40,6 +44,14 @@ extern uint32_t rng_get(void);
+ # define CHIP_TRNG_32()         random()
+ #endif
+ 
++#ifdef __EMSCRIPTEN__
++// emscripten's stdlib.h declares rand() but not POSIX random().
++// Two rand() calls XORed cover the full uint32_t range. Educational
++// sim — Math.random() backing is fine.
++# define CHIP_TRNG_SETUP()
++# define CHIP_TRNG_32()         (((uint32_t)rand() << 16) ^ (uint32_t)rand())
++#endif
++
+ #ifndef CHIP_TRNG_SETUP
+ # error "need chip TRNG function"
+ # define CHIP_TRNG_SETUP()
+@@ -154,7 +166,7 @@ STATIC mp_obj_t random_bytes(mp_obj_t count_in)
+ 
+     my_random_bytes((uint8_t *)rv.buf, count);
+ 
+-    return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv);
++    return mp_obj_new_bytes_from_vstr(&rv);
+ }
+ STATIC MP_DEFINE_CONST_FUN_OBJ_1(random_bytes_obj, random_bytes);
+ 

@@ -1,0 +1,6 @@
+# The Coldcard firmware tree is fetched at build time by setup.sh — not
+# vendored. Nothing under external/ is tracked by SeedHammer.
+external/
+venv/
+__pycache__/
+*.pyc

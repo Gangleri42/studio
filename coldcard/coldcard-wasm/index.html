@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Coldcard Mk5 / Q1 — WebAssembly simulator</title>
+<link rel="icon" href="../webnfc-sim/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header>
+  <h1>Coldcard simulator <span class="brand">— Mk5 / Q1, in browser</span></h1>
+  <nav class="variant-switch" role="tablist" aria-label="Coldcard model">
+    <button type="button" role="tab" data-variant="coldcard-mk5" aria-selected="false">Mk5</button>
+    <button type="button" role="tab" data-variant="coldcard-q1"  aria-selected="false">Q1</button>
+  </nav>
+</header>
+
+<main>
+
+<section class="device-frame device-frame--mk5"
+         data-variant="coldcard-mk5"
+         aria-label="Coldcard Mk5 simulator"
+         hidden>
+  <img class="device-frame__photo"
+       src="assets/coldcard/mk5-front.png"
+       alt="">
+  <canvas class="device-frame__screen"
+          width="128" height="64"
+          role="img"
+          aria-label="Coldcard Mk5 screen output (128 by 64 pixel monochrome OLED)"></canvas>
+  <div class="device-frame__keys">
+    <!-- 3×4 keypad. Centres derived from mk5-front.png (440×654).
+         Coords are %-of-frame; .h is %-of-frame too. -->
+    <button class="key" data-key="1" style="--x:24.32%;--y:42.05%;--w:15.23%;--h:9.94%" aria-label="Key 1">1</button>
+    <button class="key" data-key="2" style="--x:42.50%;--y:42.05%;--w:15.23%;--h:9.94%" aria-label="Key 2">2</button>
+    <button class="key" data-key="3" style="--x:60.91%;--y:42.05%;--w:15.23%;--h:9.94%" aria-label="Key 3">3</button>
+    <button class="key" data-key="4" style="--x:24.32%;--y:54.59%;--w:15.23%;--h:9.94%" aria-label="Key 4">4</button>
+    <button class="key" data-key="5" style="--x:42.50%;--y:54.59%;--w:15.23%;--h:9.94%" aria-label="Key 5">5</button>
+    <button class="key" data-key="6" style="--x:60.91%;--y:54.59%;--w:15.23%;--h:9.94%" aria-label="Key 6">6</button>
+    <button class="key" data-key="7" style="--x:24.32%;--y:67.13%;--w:15.23%;--h:9.94%" aria-label="Key 7, left">7</button>
+    <button class="key" data-key="8" style="--x:42.50%;--y:67.13%;--w:15.23%;--h:9.94%" aria-label="Key 8">8</button>
+    <button class="key" data-key="9" style="--x:60.91%;--y:67.13%;--w:15.23%;--h:9.94%" aria-label="Key 9, right">9</button>
+    <button class="key" data-key="x" style="--x:24.32%;--y:79.66%;--w:15.23%;--h:9.94%" aria-label="Cancel">×</button>
+    <button class="key" data-key="0" style="--x:42.50%;--y:79.66%;--w:15.23%;--h:9.94%" aria-label="Key 0">0</button>
+    <button class="key" data-key="y" style="--x:60.91%;--y:79.66%;--w:15.23%;--h:9.94%" aria-label="OK">✓</button>
+  </div>
+</section>
+
+<section class="device-frame device-frame--q1"
+         data-variant="coldcard-q1"
+         aria-label="Coldcard Q1 simulator"
+         hidden>
+  <img class="device-frame__photo"
+       src="assets/coldcard/coldcard-q.png"
+       alt="">
+  <canvas class="device-frame__screen"
+          width="320" height="240"
+          role="img"
+          aria-label="Coldcard Q1 screen output (320 by 240 pixel colour LCD)"></canvas>
+  <div class="device-frame__keys">
+    <!-- 32 keys measured from coldcard-q.png (357×530); top-left anchor.
+         Pitch=8% across all alpha rows; button face w=6%, gap=2%. -->
+    <!-- Nav row -->
+    <button class="key key--small" data-key="x" style="--x:65%;--y:46%;--w:25%;--h:5%" aria-label="Cancel">CAN</button>
+    <button class="key key--small" data-key="y" style="--x:65%;--y:52%;--w:25%;--h:5%" aria-label="Enter">ENT</button>
+    <button class="key key--small" data-key="l" style="--x:30%;--y:47%;--w:14%;--h:10%" aria-label="Left">◀</button>
+    <button class="key key--small" data-key="r" style="--x:56%;--y:47%;--w:14%;--h:10%" aria-label="Right">▶</button>
+    <button class="key key--small" data-key="u" style="--x:44%;--y:47%;--w:12%;--h:4.5%" aria-label="Up">▲</button>
+    <button class="key key--small" data-key="d" style="--x:44%;--y:52%;--w:12%;--h:5%" aria-label="Down">▼</button>
+
+    <!-- Q-row: x0=12, pitch=8, w=6 -->
+    <button class="key key--alpha" data-key="q" style="--x:12%;--y:64%;--w:6%;--h:5%" aria-label="Q">Q</button>
+    <button class="key key--alpha" data-key="w" style="--x:20%;--y:64%;--w:6%;--h:5%" aria-label="W">W</button>
+    <button class="key key--alpha" data-key="e" style="--x:28%;--y:64%;--w:6%;--h:5%" aria-label="E">E</button>
+    <button class="key key--alpha" data-key="r" style="--x:36%;--y:64%;--w:6%;--h:5%" aria-label="R">R</button>
+    <button class="key key--alpha" data-key="t" style="--x:44%;--y:64%;--w:6%;--h:5%" aria-label="T">T</button>
+    <button class="key key--alpha" data-key="y" style="--x:52%;--y:64%;--w:6%;--h:5%" aria-label="Y">Y</button>
+    <button class="key key--alpha" data-key="u" style="--x:60%;--y:64%;--w:6%;--h:5%" aria-label="U">U</button>
+    <button class="key key--alpha" data-key="i" style="--x:68%;--y:64%;--w:6%;--h:5%" aria-label="I">I</button>
+    <button class="key key--alpha" data-key="o" style="--x:76%;--y:64%;--w:6%;--h:5%" aria-label="O">O</button>
+    <button class="key key--alpha" data-key="p" style="--x:84%;--y:64%;--w:6%;--h:5%" aria-label="P">P</button>
+
+    <!-- A-row: x0=14, pitch=8, w=6 -->
+    <button class="key key--alpha" data-key="a" style="--x:14%;--y:70%;--w:6%;--h:5%" aria-label="A">A</button>
+    <button class="key key--alpha" data-key="s" style="--x:22%;--y:70%;--w:6%;--h:5%" aria-label="S">S</button>
+    <button class="key key--alpha" data-key="d" style="--x:30%;--y:70%;--w:6%;--h:5%" aria-label="D">D</button>
+    <button class="key key--alpha" data-key="f" style="--x:38%;--y:70%;--w:6%;--h:5%" aria-label="F">F</button>
+    <button class="key key--alpha" data-key="g" style="--x:46%;--y:70%;--w:6%;--h:5%" aria-label="G">G</button>
+    <button class="key key--alpha" data-key="h" style="--x:54%;--y:70%;--w:6%;--h:5%" aria-label="H">H</button>
+    <button class="key key--alpha" data-key="j" style="--x:62%;--y:70%;--w:6%;--h:5%" aria-label="J">J</button>
+    <button class="key key--alpha" data-key="k" style="--x:70%;--y:70%;--w:6%;--h:5%" aria-label="K">K</button>
+    <button class="key key--alpha" data-key="l" style="--x:78%;--y:70%;--w:6%;--h:5%" aria-label="L">L</button>
+
+    <!-- Z-row: x0=14, pitch=8, w=6 -->
+    <button class="key key--alpha" data-key="z" style="--x:14%;--y:76%;--w:6%;--h:5%" aria-label="Z">Z</button>
+    <button class="key key--alpha" data-key="x" style="--x:22%;--y:76%;--w:6%;--h:5%" aria-label="X">X</button>
+    <button class="key key--alpha" data-key="c" style="--x:30%;--y:76%;--w:6%;--h:5%" aria-label="C">C</button>
+    <button class="key key--alpha" data-key="v" style="--x:38%;--y:76%;--w:6%;--h:5%" aria-label="V">V</button>
+    <button class="key key--alpha" data-key="b" style="--x:46%;--y:76%;--w:6%;--h:5%" aria-label="B">B</button>
+    <button class="key key--alpha" data-key="n" style="--x:54%;--y:76%;--w:6%;--h:5%" aria-label="N">N</button>
+    <button class="key key--alpha" data-key="m" style="--x:62%;--y:76%;--w:6%;--h:5%" aria-label="M">M</button>
+
+    <!-- Bottom row -->
+    <button class="key key--small" data-key=" " style="--x:38%;--y:83%;--w:34%;--h:4%" aria-label="Space">SPACE</button>
+    <button class="key key--small" data-key="backspace" style="--x:78%;--y:82%;--w:11%;--h:5%" aria-label="Backspace">⌫</button>
+  </div>
+</section>
+
+<aside class="screen-mirror" aria-live="polite" aria-atomic="false">
+  <div class="screen-mirror__title" id="screen-mirror-title">Screen contents</div>
+  <pre class="screen-mirror__body" id="screen-mirror-body"></pre>
+</aside>
+
+<section class="share-actions" aria-label="NFC share shortcuts">
+  <button type="button" id="btn-share-seed" class="share-btn">Share Seed via NFC</button>
+  <button type="button" id="btn-share-descriptor" class="share-btn">Share Descriptor via NFC</button>
+</section>
+
+<section class="status" aria-live="polite">
+  <p id="status-line">Loading…</p>
+  <details>
+    <summary>How this works</summary>
+    <p>
+      This is an in-browser Coldcard simulator. The screen rectangle hosts
+      a live <code>&lt;canvas&gt;</code> driven by the MicroPython firmware
+      compiled to WebAssembly; the keypad buttons inject keycodes into
+      the firmware loop. Tap <kbd>✓</kbd> to confirm, <kbd>×</kbd> to
+      cancel. Keyboard <kbd>0</kbd>–<kbd>9</kbd>, <kbd>Enter</kbd>,
+      <kbd>Esc</kbd>, <kbd>←</kbd>/<kbd>→</kbd> work on both variants.
+    </p>
+    <p>
+      "Share Seed Words via NFC" writes an NDEF tag image to a MEMFS
+      file at <code>/work/nfc-dump.ndef</code>; the page reads it and
+      hands the seed words to the SeedHammer engrave pipeline. Per the
+      project's input-is-NFC-only rule, this is the same payload SeedHammer
+      consumes from real hardware.
+    </p>
+  </details>
+</section>
+
+</main>
+
+<footer>
+  <p>
+    Product photography © Coinkite Inc.; COLDCARD® is a registered
+    trademark. This is an educational simulator and is not affiliated
+    with Coinkite Inc.
+  </p>
+  <p>
+    Source: <a href="https://github.com/grumpyeng/seedhammer/tree/main/cmd/coldcard-wasm">cmd/coldcard-wasm</a>
+    · Sibling: <a href="../coldcard-sim/">cmd/coldcard-sim</a> (native unix-port simulator)
+  </p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

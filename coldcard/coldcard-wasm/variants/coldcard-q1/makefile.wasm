@@ -1,0 +1,62 @@
+# Build wrapper for the Coldcard Q1 WebAssembly variant.
+#
+# Sibling of variants/coldcard-mk5/makefile.wasm. See that file's
+# header for the full plumbing. Output:
+#   cmd/coldcard-wasm/external/micropython/ports/webassembly/
+#       build-coldcard-q1/coldcard-mpy-coldcard-q1.{mjs,wasm}
+
+VARIANT        := coldcard-q1
+HERE           := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+# Paths relative to this variant dir so the build is independent of where
+# coldcard-wasm/ sits (firmware cmd/ or Studio coldcard/): HERE is
+# .../coldcard-wasm/variants/coldcard-q1/, ../../ is coldcard-wasm/.
+CC_WASM        := $(abspath $(HERE)/../..)
+MPY_DIR        := $(CC_WASM)/external/micropython
+MPY_PORT_DIR   := $(MPY_DIR)/ports/webassembly
+PORT_VARIANTS  := $(MPY_PORT_DIR)/variants
+LINKED_VARIANT := $(PORT_VARIANTS)/$(VARIANT)
+
+COLDCARD_FW    := $(abspath $(CC_WASM)/../coldcard-sim/external/firmware)
+COLDCARD_SHARED          := $(COLDCARD_FW)/shared
+COLDCARD_SHARED_OVERRIDES := $(HERE)/shared_overrides
+LIBNGU_DIR     := $(COLDCARD_FW)/external/libngu
+
+COLDCARD_CRYPTO_PLAN ?= A
+
+CFLAGS_EXTRA := -O2 -DNDEBUG -Wno-error \
+                -Wno-unused-function -Wno-return-type
+
+ifeq ($(COLDCARD_CRYPTO_PLAN),A)
+USER_C_MODULES := $(LIBNGU_DIR)
+NGU_FLAGS := NGU_NEEDS_CIFRA=1 NGU_USE_DIRECT_CIFRA=1 EXCLUDE_NGU_TESTS=1 \
+             NGU_TOP_DIR=$(LIBNGU_DIR)
+else
+USER_C_MODULES :=
+NGU_FLAGS :=
+endif
+
+.PHONY: all link clean info
+all: link
+	$(MAKE) -C $(MPY_PORT_DIR) \
+	    VARIANT=$(VARIANT) \
+	    BUILD=build-$(VARIANT) \
+	    USER_C_MODULES="$(USER_C_MODULES)" \
+	    CFLAGS_EXTRA="$(CFLAGS_EXTRA)" \
+	    PROG_MJS=coldcard-mpy-$(VARIANT).mjs \
+	    $(NGU_FLAGS)
+
+link:
+	@mkdir -p $(PORT_VARIANTS)
+	@if [ -L $(LINKED_VARIANT) ] || [ -d $(LINKED_VARIANT) ]; then \
+	    rm -rf $(LINKED_VARIANT); \
+	fi
+	ln -s $(HERE:%/=%) $(LINKED_VARIANT)
+
+clean:
+	rm -rf $(MPY_PORT_DIR)/build-$(VARIANT)
+
+info:
+	@echo "variant     : $(VARIANT)"
+	@echo "MPY_PORT_DIR: $(MPY_PORT_DIR)"
+	@echo "COLDCARD_FW : $(COLDCARD_FW)"
+	@echo "crypto plan : $(COLDCARD_CRYPTO_PLAN)"
