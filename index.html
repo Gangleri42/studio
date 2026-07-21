@@ -182,27 +182,6 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
 .plateSvg { border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; background: #eceef2;
   display: grid; place-items: center; padding: 8px; }
 .plateSvg img { display: block; max-width: 100%; max-height: 46vh; width: auto; height: auto; }
-/* Coldcard: an original device frame (no Coinkite product photos). */
-.ccBody { width: 300px; max-width: 100%; background: linear-gradient(160deg, #26292f, #15171b);
-  border: 1px solid var(--hair); border-radius: 22px; padding: 20px 20px 24px;
-  box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; gap: 16px; }
-.ccLabel { align-self: flex-start; font: 600 12px/1 ui-monospace, monospace; letter-spacing: .12em;
-  color: #d7a34a; text-transform: uppercase; }
-.ccScreenWrap { width: 100%; background: #05070a; border-radius: 8px; padding: 8px;
-  border: 1px solid rgba(255,255,255,.06); }
-#ccScreen { image-rendering: pixelated; width: 100%; aspect-ratio: 128 / 64; display: block; }
-.ccKeypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
-.cckey { position: relative; appearance: none; aspect-ratio: 1.4; border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.09); background: linear-gradient(#20232a, #171a1f);
-  color: #e7e9ee; font: 600 17px ui-monospace, monospace; cursor: pointer; transition: transform .08s, background .15s; }
-.cckey:hover { background: linear-gradient(#262a32, #1b1e24); }
-.cckey:active { transform: translateY(1px); }
-.cckey i { position: absolute; top: 4px; right: 7px; font-size: 8px; font-style: normal; color: var(--muted); }
-.cckey.ccx { color: #e8705f; } .cckey.ccok { color: #4fc48d; }
-@media (prefers-color-scheme: light) {
-  .ccBody { background: linear-gradient(160deg, #3a3e44, #23262b); }
-  .cckey { color: #e7e9ee; }
-}
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -215,7 +194,6 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
       <button role="tab" aria-selected="false" data-mode="rich">Rich</button>
       <button role="tab" aria-selected="false" data-mode="svg">Graphics</button>
       <button role="tab" aria-selected="false" data-mode="emu">SeedHammer</button>
-      <button role="tab" aria-selected="false" data-mode="coldcard">Coldcard</button>
     </div>
     <button class="install" id="install">Install</button>
   </header>
@@ -303,40 +281,6 @@ Keep *offline*. Verify _keys_.
       </div>
     </section>
 
-    <section class="panel glass device" data-view="coldcard" hidden>
-      <div class="deviceStage">
-        <div class="ccBody">
-          <div class="ccLabel">Coldcard&nbsp;Mk5</div>
-          <div class="ccScreenWrap"><canvas id="ccScreen" width="128" height="64"></canvas></div>
-          <div class="ccKeypad" id="ccKeypad">
-            <button class="cckey" data-key="1">1</button>
-            <button class="cckey" data-key="2">2</button>
-            <button class="cckey" data-key="3">3</button>
-            <button class="cckey" data-key="4">4</button>
-            <button class="cckey" data-key="5">5<i>▲</i></button>
-            <button class="cckey" data-key="6">6</button>
-            <button class="cckey" data-key="7">7</button>
-            <button class="cckey" data-key="8">8<i>▼</i></button>
-            <button class="cckey" data-key="9">9</button>
-            <button class="cckey ccx" data-key="x">✕</button>
-            <button class="cckey" data-key="0">0</button>
-            <button class="cckey ccok" data-key="y">✓</button>
-          </div>
-        </div>
-        <div class="deviceCtl">
-          <div class="status" id="ccStatus">Loading the Coldcard firmware…</div>
-          <div class="actions">
-            <button class="primary" id="ccShareSeed">Send seed to emulator</button>
-            <button id="ccShareDesc">Send descriptor to emulator</button>
-          </div>
-          <p class="devhint">An emulated <b>Coldcard&nbsp;Mk5</b> running the real firmware in your
-            browser (5/8 to scroll, ✓/✕ to select/back). It taps a wallet straight into the
-            SeedHammer <b>emulator</b> — never a real machine — so you can watch the backup-to-plate
-            flow end to end with throwaway test material. Not affiliated with Coinkite; “Coldcard”
-            is used nominatively.</p>
-        </div>
-      </div>
-    </section>
   </main>
 
   <footer class="bar glass nav">
@@ -350,7 +294,6 @@ Keep *offline*. Verify _keys_.
 
 <script src="nfc-bus.js"></script>
 <script src="emu.js"></script>
-<script src="coldcard.js"></script>
 <script>
 "use strict";
 // ---- caps from generated glyphs.js (single-sourced from the curves package) ----
@@ -568,8 +511,8 @@ function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,
 
 // ==== app state ====
 let payload='', ok=false, sendKind='path';
-// Text/Rich/Graphics compose a payload; SeedHammer (and later Coldcard) are
-// device tabs that consume the last composed payload rather than editing it.
+// Text/Rich/Graphics compose a payload; SeedHammer is a device tab that
+// consumes the last composed payload rather than editing it.
 const EDITOR_MODES=['text','rich','svg'];
 function mode(){return document.querySelector('[role=tab][aria-selected=true]').dataset.mode;}
 function recompute(){
@@ -638,8 +581,8 @@ function gauges(m,segs,err,tCols,tRows,tSize){
 }
 
 // ==== wiring ====
-function selectTab(m,opts){
-  const feed=!opts||opts.feed!==false, editing=EDITOR_MODES.includes(m);
+function selectTab(m){
+  const editing=EDITOR_MODES.includes(m);
   document.querySelectorAll('[role=tab]').forEach(x=>x.setAttribute('aria-selected',x.dataset.mode===m));
   // swap the editor+preview view for the matching device view
   document.querySelectorAll('[data-view]').forEach(v=>{
@@ -653,18 +596,10 @@ function selectTab(m,opts){
     document.getElementById('gridChip').style.display=m==='text'?'inline-flex':'none';
     recompute();
   }else if(m==='emu'){
-    // feed=false when the Coldcard opened this tab: it already tapped a seed
-    // in, so don't clobber it by auto-feeding the composed plate.
-    feed?window.SeedHammerEmu.activate(payload):window.SeedHammerEmu.boot();
-  }else if(m==='coldcard'){
-    window.ColdcardEmu.boot();
+    window.SeedHammerEmu.activate(payload);
   }
 }
 document.querySelectorAll('[role=tab]').forEach(t=>t.onclick=()=>selectTab(t.dataset.mode));
-// Coldcard's forwardExport calls this after feeding the SeedHammer emu a seed.
-window.openSeedHammerFromColdcard=()=>selectTab('emu',{feed:false});
-document.getElementById('ccShareSeed').onclick=()=>window.ColdcardEmu.shareSeed();
-document.getElementById('ccShareDesc').onclick=()=>window.ColdcardEmu.shareDescriptor();
 ['text','md','bodyMM','svg','height','rotate','pos'].forEach(id=>document.getElementById(id).addEventListener('input',recompute));
 document.getElementById('grid').addEventListener('change',recompute);
 const drop=document.getElementById('drop'),file=document.getElementById('file');

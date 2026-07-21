@@ -11,8 +11,8 @@
   let state = "idle"; // idle | booting | ready | error
   let canvas, ctx, statusEl;
   let firstFrame = false;
-  let pending = null; // {kind:"curves"|"text", data} queued to tap once up
-  let lastFed = null; // last data actually tapped, to skip redundant re-taps
+  let pending = null; // curves payload queued to tap once the device is up
+  let lastFed = null; // last payload actually tapped, to skip redundant re-taps
   let installed = false; // canvas/listeners installed once, survives boot retries
 
   function setStatus(m) { if (statusEl) statusEl.textContent = m; }
@@ -126,39 +126,29 @@
     if (pending != null) { doFeed(pending); pending = null; }
   }
 
-  // doFeed taps a {kind, data} into the device: a curves plate from the editor
-  // or plain text (a seed/descriptor) forwarded from the Coldcard emulator.
-  function doFeed(item) {
-    if (!item || !item.data) return;
-    const bus = window.NFCBus;
-    if (!bus) return;
-    const ok = item.kind === "text" ? bus.feedEmuText(item.data) : bus.feedEmu(item.data);
-    if (ok) {
-      lastFed = item.data;
-      setStatus(item.kind === "text"
-        ? "Tapped the wallet in from the Coldcard — watch the device read it."
-        : "Tapped your plate in as an NFC scan — watch the device read it.");
+  // doFeed taps a composed curves plate into the device as a synthetic scan.
+  function doFeed(payload) {
+    if (!payload || !window.NFCBus) return;
+    if (window.NFCBus.feedEmu(payload)) {
+      lastFed = payload;
+      setStatus("Tapped your plate in as an NFC scan — watch the device read it.");
     }
   }
 
-  function queueOrFeed(item, always) {
+  function queueOrFeed(payload, always) {
     if (state === "error") state = "idle";
-    if (state === "idle") { pending = item; boot(); return; }
-    if (state === "booting") { pending = item; return; }
-    if (always || item.data !== lastFed) doFeed(item);
+    if (state === "idle") { pending = payload; boot(); return; }
+    if (state === "booting") { pending = payload; return; }
+    if (always || payload !== lastFed) doFeed(payload);
   }
 
   // activate: called when the SeedHammer tab opens from an editor tab. Boots on
   // first open and taps in the current plate; on a later reopen it re-taps only
   // if the design changed, so returning to a device mid-flow doesn't disturb it.
-  function activate(payload) { queueOrFeed({ kind: "curves", data: payload }, false); }
+  function activate(payload) { queueOrFeed(payload, false); }
 
   // feed: the explicit "Load composed plate" button — always re-taps.
-  function feed(payload) { queueOrFeed({ kind: "curves", data: payload }, true); }
+  function feed(payload) { queueOrFeed(payload, true); }
 
-  // feedText: a Coldcard export (seed or descriptor) tapped in as plain text.
-  // Boots the device if the SeedHammer tab was never opened.
-  function feedText(text) { queueOrFeed({ kind: "text", data: text }, true); }
-
-  window.SeedHammerEmu = { activate, feed, feedText, boot };
+  window.SeedHammerEmu = { activate, feed, boot };
 })();

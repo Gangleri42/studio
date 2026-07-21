@@ -46,37 +46,6 @@
     return new Uint8Array(tlv);
   }
 
-  // buildTextTap wraps plain text as an NDEF Well-Known Text record inside a
-  // message TLV — the byte shape a scanned seed or descriptor tag carries.
-  // The Coldcard emulator exports a seed/descriptor as text; the SeedHammer
-  // firmware content-sniffs it (bip39 / descriptor / codex32 / plain text),
-  // so it must arrive as a Text record, not a curves record.
-  function buildTextTap(text) {
-    const body = enc.encode(text);
-    const payload = new Uint8Array(3 + body.length);
-    payload[0] = 0x02; // UTF-8, language length 2
-    payload[1] = 0x65; // 'e'
-    payload[2] = 0x6e; // 'n'
-    payload.set(body, 3);
-    const rec = [];
-    if (payload.length < 256) {
-      rec.push(0xd1, 0x01, payload.length, 0x54); // MB|ME|SR|WellKnown, type "T"
-    } else {
-      const n = payload.length;
-      rec.push(0xc1, 0x01, (n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255, 0x54);
-    }
-    for (const b of payload) rec.push(b);
-    const tlv = [];
-    if (rec.length < 255) {
-      tlv.push(0x03, rec.length);
-    } else {
-      tlv.push(0x03, 0xff, (rec.length >>> 8) & 255, rec.length & 255);
-    }
-    for (const b of rec) tlv.push(b);
-    tlv.push(0xfe);
-    return new Uint8Array(tlv);
-  }
-
   // feedEmu delivers a curves payload to the running emulator as a synthetic
   // tap. Returns false if the emulator isn't booted yet (its tap global is
   // installed by the wasm main), so callers can defer.
@@ -86,13 +55,5 @@
     return true;
   }
 
-  // feedEmuText delivers plain text (a Coldcard seed/descriptor export) to the
-  // emulator as a Well-Known Text tap.
-  function feedEmuText(text) {
-    if (typeof root.seedhammerSynthTap !== "function") return false;
-    root.seedhammerSynthTap(buildTextTap(text));
-    return true;
-  }
-
-  root.NFCBus = { RECORD_TYPE, buildCurvesTap, buildTextTap, feedEmu, feedEmuText };
+  root.NFCBus = { RECORD_TYPE, buildCurvesTap, feedEmu };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -19,3 +19,9 @@ dist/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Coldcard emulator: removed from the public repo (Coinkite feedback) but kept
+# locally. The source, the tab controller, and the built wasm stay on disk,
+# untracked. Restore the integration from the local `coldcard-local` branch.
+/coldcard/
+/coldcard.js

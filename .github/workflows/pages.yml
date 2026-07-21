@@ -13,13 +13,6 @@ on:
   push:
     branches:
       - main
-  # Re-deploy after the separate Coldcard build publishes its wasm, so the
-  # Coldcard tab goes from "build pending" to live without waiting for an
-  # unrelated push. The wasm fetch below is non-fatal, so a failed Coldcard
-  # build just re-deploys the same build-pending state — no harm.
-  workflow_run:
-    workflows: ["Coldcard emulator wasm"]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -72,21 +65,6 @@ jobs:
             echo "::warning::SeedHammer emu.wasm failed to build against firmware ${FIRMWARE_REF}. The editor and text composer still deploy; the SeedHammer tab shows a load error until this is fixed."
           fi
 
-      # The Coldcard wasm is built by the separate coldcard-build.yml and
-      # published to a rolling Release. Fetch it if present; its absence is
-      # expected until that build runs, and the Coldcard tab degrades to
-      # "build pending" — so this never fails the editor + emu deploy.
-      - name: Fetch the Coldcard emulator wasm (non-fatal)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          if gh release download coldcard-wasm-latest --pattern 'coldcard-mpy-*' --dir . 2>/dev/null; then
-            echo "Coldcard wasm fetched: $(ls coldcard-mpy-* 2>/dev/null | tr '\n' ' ')"
-          else
-            echo "::warning::Coldcard emulator wasm not published yet (release coldcard-wasm-latest). The Coldcard tab shows 'build pending' until coldcard-build.yml runs."
-          fi
-
       - name: Assemble Pages tree
         run: |
           set -euo pipefail
@@ -97,23 +75,17 @@ jobs:
           # the published site.
           cp index.html glyphs.js sw.js manifest.webmanifest \
              icon.svg icon-192.png icon-512.png icon-maskable.png \
-             nfc-bus.js emu.js coldcard.js dist/
+             nfc-bus.js emu.js dist/
 
           # SeedHammer emulator wasm + the wasm_exec.js from the exact Go that
-          # built it (they must match). Non-fatal like the Coldcard fetch: if
-          # the build above failed these are absent and the editor still ships;
-          # the SeedHammer tab then shows a load error.
+          # built it (they must match). Non-fatal: if the build above failed
+          # these are absent and the editor still ships; the SeedHammer tab
+          # then shows a load error.
           if cp emu/emu.wasm emu/wasm_exec.js dist/ 2>/dev/null; then
             echo "SeedHammer emu.wasm staged ($(wc -c < dist/emu.wasm) bytes)."
           else
             echo "::warning::emu.wasm/wasm_exec.js absent; the SeedHammer tab will show a load error."
           fi
-
-          # Coldcard emulator wasm, if the separate build published it. Absent
-          # is fine — the tab shows "build pending" (see coldcard-build.yml).
-          cp coldcard-mpy-*.mjs coldcard-mpy-*.wasm dist/ 2>/dev/null \
-            && echo "Coldcard wasm staged." \
-            || echo "Coldcard wasm not present; the Coldcard tab shows build pending."
 
           # Plain-text composer under /textplate/.
           cp textplate/index.html textplate/glyphs.js dist/textplate/

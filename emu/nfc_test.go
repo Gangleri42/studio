@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"seedhammer.com/bip39"
 	"seedhammer.com/curves"
 	"seedhammer.com/engrave"
 )
@@ -177,62 +176,6 @@ func TestLongCurvesTap(t *testing.T) {
 	}
 	if _, err := curves.Parse(got, gateParams); err != nil {
 		t.Fatalf("curves.Parse(long): %v", err)
-	}
-}
-
-// buildTextTap mirrors nfc-bus.js buildTextTap: a Well-Known Text record in a
-// message TLV, the byte shape the Coldcard transport delivers a seed or
-// descriptor as.
-func buildTextTap(text string) []byte {
-	payload := append([]byte{0x02, 'e', 'n'}, text...)
-	var rec []byte
-	if len(payload) < 256 {
-		rec = append(rec, 0xd1, 0x01, byte(len(payload)), 'T')
-	} else {
-		rec = append(rec, 0xc1, 0x01)
-		rec = binary.BigEndian.AppendUint32(rec, uint32(len(payload)))
-		rec = append(rec, 'T')
-	}
-	rec = append(rec, payload...)
-	var tlv []byte
-	if len(rec) < 255 {
-		tlv = append(tlv, 0x03, byte(len(rec)))
-	} else {
-		tlv = append(tlv, 0x03, 0xFF)
-		tlv = binary.BigEndian.AppendUint16(tlv, uint16(len(rec)))
-	}
-	tlv = append(tlv, rec...)
-	tlv = append(tlv, 0xFE)
-	return tlv
-}
-
-// TestColdcardSeedTapContentSniffs is the Coldcard→SeedHammer transport gate:
-// the Coldcard exports a seed as a space-separated BIP39 mnemonic in an NDEF
-// Text record. The emu reader must decode it to plain text (record type empty,
-// so the scan funnel content-sniffs it) and bip39.Parse must accept it — the
-// path that lands on the backup-wallet flow.
-func TestColdcardSeedTapContentSniffs(t *testing.T) {
-	const seed = "abandon abandon abandon abandon abandon abandon " +
-		"abandon abandon abandon abandon abandon about"
-	tap := buildTextTap(seed)
-
-	nr := newNFCReader()
-	nr.tap(tap)
-	r := &ndefReader{nfc: nr}
-	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read text tap: %v", err)
-	}
-	// A Well-Known Text record is decoded, not passed through: the reader
-	// yields the body and reports no record type, so the scan funnel sniffs it.
-	if rt := r.RecordType(); len(rt) != 0 {
-		t.Fatalf("text record should surface no type, got %q", rt)
-	}
-	if string(got) != seed {
-		t.Fatalf("text body = %q, want %q", got, seed)
-	}
-	if _, err := bip39.Parse(got); err != nil {
-		t.Fatalf("bip39.Parse of the Coldcard seed export: %v", err)
 	}
 }
 
