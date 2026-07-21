@@ -1,0 +1,99 @@
+# Build the Coldcard emulator wasm and publish it as a Release asset.
+#
+# This is deliberately SEPARATE from the Pages deploy: it is a heavy build
+# (upstream MicroPython + Emscripten + the Coldcard firmware for libngu, ~1 GB
+# fetched, several minutes) and it must never be able to break the editor +
+# SeedHammer-emu deploy. pages.yml fetches the asset this produces
+# non-fatally; if it is absent, the Coldcard tab shows "build pending".
+#
+# The build itself (coldcard/coldcard-{sim,wasm}/{setup,build}.sh) is the same
+# one proven locally against the relocated source. Studio never fetches Coinkite
+# product photos (COLDCARD_FETCH_PHOTOS defaults off) — the tab uses an original
+# frame. Only the Mk5 variant is published; add coldcard-q1 to VARIANTS to ship it.
+name: "Coldcard emulator wasm"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'coldcard/**'
+      - '.github/workflows/coldcard-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write # publish the wasm to a Release
+
+# Never cancel a run mid-flight: the final step is a multi-asset `gh release
+# upload`, and a cancel between the .mjs and .wasm clobber would leave a
+# mismatched pair on the rolling Release that the deploy would then serve.
+concurrency:
+  group: coldcard-wasm
+  cancel-in-progress: false
+
+env:
+  # Toolchain pins (also the setup.sh defaults). Bump here and in the setup
+  # scripts together.
+  MICROPYTHON_REV: v1.25.0
+  EMSCRIPTEN_REV: "4.0.0"
+  COLDCARD_REV: ca06dfd2509eacfad333be9d35ed274559915d0e
+  VARIANTS: coldcard-mk5
+  RELEASE_TAG: coldcard-wasm-latest
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Cache the fetched toolchain (MicroPython + emsdk + Coldcard firmware)
+      # keyed on the pins, so only the first run pays the ~1 GB fetch.
+      - name: Cache Coldcard toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            coldcard/coldcard-wasm/external
+            coldcard/coldcard-wasm/emsdk
+            coldcard/coldcard-sim/external
+          key: coldcard-toolchain-${{ env.MICROPYTHON_REV }}-${{ env.EMSCRIPTEN_REV }}-${{ env.COLDCARD_REV }}
+
+      - name: Fetch Coldcard firmware (libngu + shared modules; no photos)
+        run: bash coldcard/coldcard-sim/setup.sh
+
+      - name: Fetch MicroPython + Emscripten
+        run: bash coldcard/coldcard-wasm/setup.sh
+
+      # The toolchain cache restores the compiled build-<variant>/ tree with a
+      # newer mtime than the freshly checked-out source, so an incremental make
+      # would see everything up-to-date and republish stale bytes on a
+      # source-only change. Remove the build trees so the variant recompiles
+      # (and re-freezes its manifest) from the current source; the expensive
+      # fetches (emsdk, MicroPython, firmware) stay cached.
+      - name: Force a fresh variant build from restored source
+        run: rm -rf coldcard/coldcard-wasm/external/micropython/ports/webassembly/build-*
+
+      - name: Build the Coldcard emulator variants
+        run: COLDCARD_VARIANTS="${VARIANTS}" bash coldcard/coldcard-wasm/build.sh
+
+      - name: Verify the wasm artifacts exist
+        run: |
+          set -euo pipefail
+          cd coldcard/coldcard-wasm
+          for v in ${VARIANTS}; do
+            test -s "coldcard-mpy-$v.wasm" || { echo "::error::coldcard-mpy-$v.wasm missing"; exit 1; }
+            test -s "coldcard-mpy-$v.mjs"  || { echo "::error::coldcard-mpy-$v.mjs missing"; exit 1; }
+            echo "coldcard-mpy-$v.wasm: $(wc -c < coldcard-mpy-$v.wasm) bytes"
+          done
+
+      - name: Publish the wasm to a rolling Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd coldcard/coldcard-wasm
+          assets=()
+          for v in ${VARIANTS}; do assets+=("coldcard-mpy-$v.mjs" "coldcard-mpy-$v.wasm"); done
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
+            || gh release create "$RELEASE_TAG" --title "Coldcard emulator wasm" \
+                 --notes "Prebuilt Coldcard MicroPython wasm for SeedHammer Studio. Rebuilt from coldcard/ on each change; served by the Pages deploy."
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber

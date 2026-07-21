@@ -1,14 +1,25 @@
 # Publish SeedHammer Studio to GitHub Pages. The editor is the site root
 # (gangleri42.github.io/studio/); the plain-text composer sits under
 # /textplate/. Both are self-contained static apps whose glyphs.js is
-# committed and checked against the firmware source by glyphs-drift.yml,
-# so this job only copies files — no Go, WASM, or other toolchain build.
-name: "Pages: Studio + text composer"
+# committed and checked against the firmware source by glyphs-drift.yml.
+#
+# The one build step here is the SeedHammer emulator: emu/ is a GOOS=js
+# compile of the firmware gui, so this job checks the firmware out at a pinned
+# commit and runs emu/build.sh, then serves the resulting emu.wasm alongside
+# the static files. emu.wasm + wasm_exec.js are build outputs, never committed.
+name: "Pages: Studio + emulator + text composer"
 
 on:
   push:
     branches:
       - main
+  # Re-deploy after the separate Coldcard build publishes its wasm, so the
+  # Coldcard tab goes from "build pending" to live without waiting for an
+  # unrelated push. The wasm fetch below is non-fatal, so a failed Coldcard
+  # build just re-deploys the same build-pending state — no harm.
+  workflow_run:
+    workflows: ["Coldcard emulator wasm"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -25,8 +36,56 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Firmware commit the emulator is compiled against. Pinned (not `main`)
+      # so unrelated firmware edits never change the deployed emu.wasm. Kept
+      # equal to glyphs-drift.yml's FIRMWARE_REF — one firmware version backs
+      # all of Studio; bump both together (and re-verify the emu still builds)
+      # when the gui API the emu implements changes. See emu/README.md.
+      FIRMWARE_REPO: Gangleri42/seedhammer
+      FIRMWARE_REF: ae0dacbd003ce5a8614ea5ccba8db7675e524661
     steps:
       - uses: actions/checkout@v6
+
+      - name: Check out firmware at the pinned commit
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.FIRMWARE_REPO }}
+          ref: ${{ env.FIRMWARE_REF }}
+          path: _firmware
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: _firmware/go.mod
+
+      # Non-fatal: the editor + text composer are pure static files that must
+      # publish regardless. The emu is a GOOS=js compile against a pinned
+      # firmware, so it only breaks on a bad pin bump or an unreachable
+      # firmware checkout — neither of which should take the core site down.
+      # A failure is surfaced as a warning; the SeedHammer tab then shows a
+      # load error until emu.wasm is present.
+      - name: Build the SeedHammer emulator (emu.wasm + wasm_exec.js)
+        run: |
+          if FIRMWARE_DIR="$GITHUB_WORKSPACE/_firmware" ./emu/build.sh; then
+            echo "emu.wasm built."
+          else
+            echo "::warning::SeedHammer emu.wasm failed to build against firmware ${FIRMWARE_REF}. The editor and text composer still deploy; the SeedHammer tab shows a load error until this is fixed."
+          fi
+
+      # The Coldcard wasm is built by the separate coldcard-build.yml and
+      # published to a rolling Release. Fetch it if present; its absence is
+      # expected until that build runs, and the Coldcard tab degrades to
+      # "build pending" — so this never fails the editor + emu deploy.
+      - name: Fetch the Coldcard emulator wasm (non-fatal)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          if gh release download coldcard-wasm-latest --pattern 'coldcard-mpy-*' --dir . 2>/dev/null; then
+            echo "Coldcard wasm fetched: $(ls coldcard-mpy-* 2>/dev/null | tr '\n' ' ')"
+          else
+            echo "::warning::Coldcard emulator wasm not published yet (release coldcard-wasm-latest). The Coldcard tab shows 'build pending' until coldcard-build.yml runs."
+          fi
 
       - name: Assemble Pages tree
         run: |
@@ -37,7 +96,24 @@ jobs:
           # files ship — repo meta (README, workflows, .gitignore) stays off
           # the published site.
           cp index.html glyphs.js sw.js manifest.webmanifest \
-             icon.svg icon-192.png icon-512.png icon-maskable.png dist/
+             icon.svg icon-192.png icon-512.png icon-maskable.png \
+             nfc-bus.js emu.js coldcard.js dist/
+
+          # SeedHammer emulator wasm + the wasm_exec.js from the exact Go that
+          # built it (they must match). Non-fatal like the Coldcard fetch: if
+          # the build above failed these are absent and the editor still ships;
+          # the SeedHammer tab then shows a load error.
+          if cp emu/emu.wasm emu/wasm_exec.js dist/ 2>/dev/null; then
+            echo "SeedHammer emu.wasm staged ($(wc -c < dist/emu.wasm) bytes)."
+          else
+            echo "::warning::emu.wasm/wasm_exec.js absent; the SeedHammer tab will show a load error."
+          fi
+
+          # Coldcard emulator wasm, if the separate build published it. Absent
+          # is fine — the tab shows "build pending" (see coldcard-build.yml).
+          cp coldcard-mpy-*.mjs coldcard-mpy-*.wasm dist/ 2>/dev/null \
+            && echo "Coldcard wasm staged." \
+            || echo "Coldcard wasm not present; the Coldcard tab shows build pending."
 
           # Plain-text composer under /textplate/.
           cp textplate/index.html textplate/glyphs.js dist/textplate/
