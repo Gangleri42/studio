@@ -4,6 +4,17 @@ glyphs.gen.js
 # Pages build output.
 dist/
 
+# Emulator build outputs: produced by emu/build.sh and copied to the site
+# root by the Pages deploy (emu.js fetches them relative to the page). Never
+# committed — see emu/.gitignore for the in-tree copies.
+/emu.wasm
+/wasm_exec.js
+
+# Coldcard emulator build outputs (coldcard/build.sh); served from the root,
+# fetched lazily by coldcard.js. Never committed.
+/coldcard-mpy-*.mjs
+/coldcard-mpy-*.wasm
+
 # Cruft.
 .DS_Store
 __pycache__/

@@ -156,6 +156,37 @@ canvas { width: 100%; height: 100%; display: block; border-radius: 16px; }
 details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-monospace, monospace;
   background: var(--glass-2); border: 1px solid var(--hair); border-radius: 10px; padding: 9px; color: var(--muted); }
+/* SeedHammer emulator tab: the device screen spans the whole main grid */
+.device { grid-column: 1 / -1; align-items: center; justify-content: center; }
+.deviceStage { display: flex; flex-direction: column; align-items: center; gap: 18px;
+  width: 100%; max-width: 520px; }
+#emuScreen { image-rendering: pixelated; width: 100%; max-width: 480px; aspect-ratio: 480 / 320;
+  background: #05070a; border-radius: 12px; touch-action: none; cursor: grab;
+  border: 1px solid var(--stroke); box-shadow: var(--shadow); }
+#emuScreen:active { cursor: grabbing; }
+.deviceCtl { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 12px; }
+.devhint { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+/* Coldcard: an original device frame (no Coinkite product photos). */
+.ccBody { width: 300px; max-width: 100%; background: linear-gradient(160deg, #26292f, #15171b);
+  border: 1px solid var(--hair); border-radius: 22px; padding: 20px 20px 24px;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.ccLabel { align-self: flex-start; font: 600 12px/1 ui-monospace, monospace; letter-spacing: .12em;
+  color: #d7a34a; text-transform: uppercase; }
+.ccScreenWrap { width: 100%; background: #05070a; border-radius: 8px; padding: 8px;
+  border: 1px solid rgba(255,255,255,.06); }
+#ccScreen { image-rendering: pixelated; width: 100%; aspect-ratio: 128 / 64; display: block; }
+.ccKeypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
+.cckey { position: relative; appearance: none; aspect-ratio: 1.4; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.09); background: linear-gradient(#20232a, #171a1f);
+  color: #e7e9ee; font: 600 17px ui-monospace, monospace; cursor: pointer; transition: transform .08s, background .15s; }
+.cckey:hover { background: linear-gradient(#262a32, #1b1e24); }
+.cckey:active { transform: translateY(1px); }
+.cckey i { position: absolute; top: 4px; right: 7px; font-size: 8px; font-style: normal; color: var(--muted); }
+.cckey.ccx { color: #e8705f; } .cckey.ccok { color: #4fc48d; }
+@media (prefers-color-scheme: light) {
+  .ccBody { background: linear-gradient(160deg, #3a3e44, #23262b); }
+  .cckey { color: #e7e9ee; }
+}
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -167,12 +198,14 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
       <button role="tab" aria-selected="true" data-mode="text">Text</button>
       <button role="tab" aria-selected="false" data-mode="rich">Rich</button>
       <button role="tab" aria-selected="false" data-mode="svg">Graphics</button>
+      <button role="tab" aria-selected="false" data-mode="emu">SeedHammer</button>
+      <button role="tab" aria-selected="false" data-mode="coldcard">Coldcard</button>
     </div>
     <button class="install" id="install">Install</button>
   </header>
 
   <main>
-    <section class="panel glass">
+    <section class="panel glass" data-view="editor">
       <h2 id="editorTitle">Text plate</h2>
       <div data-pane="text" style="display:flex;flex-direction:column;flex:1">
         <textarea id="text" spellcheck="false" placeholder="Type a plate…&#10;Firmware font, engraved on the grid.">IN CASE OF EMERGENCY
@@ -211,7 +244,7 @@ Keep *offline*. Verify _keys_.
       </div>
     </section>
 
-    <section class="panel glass stage">
+    <section class="panel glass stage" data-view="editor">
       <div class="plateWrap"><canvas id="plate" width="900" height="900"></canvas></div>
       <div class="spec">
         <div class="dims">
@@ -231,6 +264,55 @@ Keep *offline*. Verify _keys_.
         <details><summary>payload</summary><pre id="payload"></pre></details>
       </div>
     </section>
+
+    <section class="panel glass device" data-view="emu" hidden>
+      <div class="deviceStage">
+        <canvas id="emuScreen" width="480" height="320"></canvas>
+        <div class="deviceCtl">
+          <div class="status" id="emuStatus">Loading the firmware…</div>
+          <div class="actions">
+            <button class="primary" id="emuFeed">Send composed plate</button>
+          </div>
+          <p class="devhint">The real SeedHammer&nbsp;II firmware, running in your browser. Drag
+            to navigate — it's a touch device. <b>Send composed plate</b> taps in whatever you
+            designed on the Text, Rich, or Graphics tabs, exactly as a scanned NFC tag would.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel glass device" data-view="coldcard" hidden>
+      <div class="deviceStage">
+        <div class="ccBody">
+          <div class="ccLabel">Coldcard&nbsp;Mk5</div>
+          <div class="ccScreenWrap"><canvas id="ccScreen" width="128" height="64"></canvas></div>
+          <div class="ccKeypad" id="ccKeypad">
+            <button class="cckey" data-key="1">1</button>
+            <button class="cckey" data-key="2">2</button>
+            <button class="cckey" data-key="3">3</button>
+            <button class="cckey" data-key="4">4</button>
+            <button class="cckey" data-key="5">5<i>▲</i></button>
+            <button class="cckey" data-key="6">6</button>
+            <button class="cckey" data-key="7">7</button>
+            <button class="cckey" data-key="8">8<i>▼</i></button>
+            <button class="cckey" data-key="9">9</button>
+            <button class="cckey ccx" data-key="x">✕</button>
+            <button class="cckey" data-key="0">0</button>
+            <button class="cckey ccok" data-key="y">✓</button>
+          </div>
+        </div>
+        <div class="deviceCtl">
+          <div class="status" id="ccStatus">Loading the Coldcard firmware…</div>
+          <div class="actions">
+            <button class="primary" id="ccShareSeed">Share seed via NFC</button>
+            <button id="ccShareDesc">Share descriptor</button>
+          </div>
+          <p class="devhint">An emulated <b>Coldcard&nbsp;Mk5</b> running the real firmware in your
+            browser (5/8 to scroll, ✓/✕ to select/back). Sharing a wallet over NFC taps it straight
+            into the SeedHammer emulator — the backup-to-plate flow, end to end. Not affiliated with
+            Coinkite; “Coldcard” is used nominatively.</p>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="bar glass nav">
@@ -242,6 +324,9 @@ Keep *offline*. Verify _keys_.
 
 <div id="sandbox" style="position:absolute;left:-99999px;top:0;width:1000px;height:1000px;overflow:hidden" aria-hidden="true"></div>
 
+<script src="nfc-bus.js"></script>
+<script src="emu.js"></script>
+<script src="coldcard.js"></script>
 <script>
 "use strict";
 // ---- caps from generated glyphs.js (single-sourced from the curves package) ----
@@ -459,9 +544,14 @@ function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,
 
 // ==== app state ====
 let payload='', ok=false, sendKind='path';
+// Text/Rich/Graphics compose a payload; SeedHammer (and later Coldcard) are
+// device tabs that consume the last composed payload rather than editing it.
+const EDITOR_MODES=['text','rich','svg'];
 function mode(){return document.querySelector('[role=tab][aria-selected=true]').dataset.mode;}
 function recompute(){
-  const m=mode();let segs=[],err=null,tCols=0,tRows=0,tSize=null;
+  const m=mode();
+  if(!EDITOR_MODES.includes(m))return; // device tabs keep the last composed payload untouched
+  let segs=[],err=null,tCols=0,tRows=0,tSize=null;
   try{
     if(m==='text'){
       const lines=canonical(document.getElementById('text').value);
@@ -524,14 +614,33 @@ function gauges(m,segs,err,tCols,tRows,tSize){
 }
 
 // ==== wiring ====
-document.querySelectorAll('[role=tab]').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('[role=tab]').forEach(x=>x.setAttribute('aria-selected',x===t));
-  document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==t.dataset.mode;p.style.display=p.hidden?'none':'flex';});
-  document.getElementById('editorTitle').textContent={text:'Text plate',rich:'Rich text',svg:'Graphics'}[t.dataset.mode];
-  // the cell grid is a text-plate concept; hide the toggle elsewhere
-  document.getElementById('gridChip').style.display=t.dataset.mode==='text'?'inline-flex':'none';
-  recompute();
-});
+function selectTab(m,opts){
+  const feed=!opts||opts.feed!==false, editing=EDITOR_MODES.includes(m);
+  document.querySelectorAll('[role=tab]').forEach(x=>x.setAttribute('aria-selected',x.dataset.mode===m));
+  // swap the editor+preview view for the matching device view
+  document.querySelectorAll('[data-view]').forEach(v=>{
+    const show=v.dataset.view===(editing?'editor':m);
+    v.hidden=!show; v.style.display=show?'flex':'none';
+  });
+  if(editing){
+    document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==m;p.style.display=p.hidden?'none':'flex';});
+    document.getElementById('editorTitle').textContent={text:'Text plate',rich:'Rich text',svg:'Graphics'}[m];
+    // the cell grid is a text-plate concept; hide the toggle elsewhere
+    document.getElementById('gridChip').style.display=m==='text'?'inline-flex':'none';
+    recompute();
+  }else if(m==='emu'){
+    // feed=false when the Coldcard opened this tab: it already tapped a seed
+    // in, so don't clobber it by auto-feeding the composed plate.
+    feed?window.SeedHammerEmu.activate(payload):window.SeedHammerEmu.boot();
+  }else if(m==='coldcard'){
+    window.ColdcardEmu.boot();
+  }
+}
+document.querySelectorAll('[role=tab]').forEach(t=>t.onclick=()=>selectTab(t.dataset.mode));
+// Coldcard's forwardExport calls this after feeding the SeedHammer emu a seed.
+window.openSeedHammerFromColdcard=()=>selectTab('emu',{feed:false});
+document.getElementById('ccShareSeed').onclick=()=>window.ColdcardEmu.shareSeed();
+document.getElementById('ccShareDesc').onclick=()=>window.ColdcardEmu.shareDescriptor();
 ['text','md','bodyMM','svg','height','rotate','pos'].forEach(id=>document.getElementById(id).addEventListener('input',recompute));
 document.getElementById('grid').addEventListener('change',recompute);
 const drop=document.getElementById('drop'),file=document.getElementById('file');
@@ -540,6 +649,7 @@ file.onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>{document.getE
 ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hot');}));
 ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hot');}));
 drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)f.text().then(t=>{document.getElementById('svg').value=t;recompute();});});
+document.getElementById('emuFeed').onclick=()=>window.SeedHammerEmu.feed(payload);
 document.getElementById('copy').onclick=async()=>{await navigator.clipboard.writeText(payload);status('Copied ✓');};
 document.getElementById('download').onclick=()=>{const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([payload],{type:'text/plain'}));a.download=(sendKind==='text'?'plate.txt':'plate.curves');a.click();};

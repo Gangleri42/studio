@@ -1,6 +1,6 @@
 // SeedHammer Studio service worker: cache the app shell and the shared
 // font data so the tool works offline once installed.
-const CACHE = 'sh-studio-v2';
+const CACHE = 'sh-studio-v4';
 const SHELL = [
   './',
   './index.html',
@@ -9,7 +9,14 @@ const SHELL = [
   './icon-192.png',
   './icon-512.png',
   './glyphs.js',
+  './nfc-bus.js',
+  './emu.js',
+  './coldcard.js',
 ];
+// The emulator wasm (emu.wasm, coldcard-mpy-*.wasm/.mjs) and wasm_exec.js are
+// intentionally NOT precached: several MB each, fetched lazily the first time
+// their tab opens. The fetch handler below still caches them opportunistically
+// once fetched, so a second visit works offline.
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -28,8 +35,14 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      // Only cache successful, same-origin, basic responses. Caching a 404
+      // would pin it: the Coldcard wasm is deliberately absent until its
+      // build publishes, and a stored 404 would then be served forever, so
+      // the tab could never recover. res.ok also rules out opaque/error responses.
+      if (res.ok && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      }
       return res;
     }).catch(() => hit))
   );
