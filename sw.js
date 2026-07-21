@@ -1,6 +1,6 @@
 // SeedHammer Studio service worker: cache the app shell and the shared
 // font data so the tool works offline once installed.
-const CACHE = 'sh-studio-v10';
+const CACHE = 'sh-studio-v11';
 const SHELL = [
   './',
   './index.html',
