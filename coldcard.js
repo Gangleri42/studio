@@ -88,7 +88,7 @@
       mp.runPython("import boot");
       mp.runPython("import main");
       state = "ready";
-      setStatus("Coldcard Mk5 running. Navigate with the keypad, or share a wallet below.");
+      setStatus("Coldcard Mk5 running. Navigate with the keypad, or send a wallet to the emulator below.");
       pollScreen();
       pollNdef();
     } catch (e) {
@@ -135,7 +135,7 @@
   function forwardExport(bytes) {
     const text = decodeNdefText(bytes);
     if (!text) return;
-    setStatus(`Shared a ${text.split(" ").length > 6 ? "seed" : "wallet"} — opening the SeedHammer emulator…`);
+    setStatus(`Sent the ${text.split(" ").length > 6 ? "seed" : "wallet"} to the SeedHammer emulator…`);
     if (window.SeedHammerEmu) window.SeedHammerEmu.feedText(text);
     // Show the SeedHammer device so the operator watches it read the tap.
     if (window.openSeedHammerFromColdcard) window.openSeedHammerFromColdcard();
@@ -173,12 +173,12 @@
   function shareSeed() {
     if (state !== "ready") return;
     try { mp.runPython("import cc_share; cc_share.share_seed_via_nfc()"); }
-    catch (e) { setStatus("Share seed failed: " + (e.message || e)); }
+    catch (e) { setStatus("Send to emulator failed: " + (e.message || e)); }
   }
   function shareDescriptor() {
     if (state !== "ready") return;
     try { mp.runPython("import cc_share; cc_share.share_descriptor_via_nfc()"); }
-    catch (e) { setStatus("Share descriptor failed: " + (e.message || e)); }
+    catch (e) { setStatus("Send to emulator failed: " + (e.message || e)); }
   }
 
   window.ColdcardEmu = { boot, shareSeed, shareDescriptor };

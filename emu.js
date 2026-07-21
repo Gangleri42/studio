@@ -96,7 +96,7 @@
   }
 
   function onFirstFrame() {
-    setStatus("Drag to navigate — it's a touch device. Use “Send composed plate” to tap in your design.");
+    setStatus("Drag to navigate — it's a touch device. Use “Load composed plate” to tap in your design.");
     if (pending != null) { doFeed(pending); pending = null; }
   }
 
@@ -127,7 +127,7 @@
   // if the design changed, so returning to a device mid-flow doesn't disturb it.
   function activate(payload) { queueOrFeed({ kind: "curves", data: payload }, false); }
 
-  // feed: the explicit "Send composed plate" button — always re-taps.
+  // feed: the explicit "Load composed plate" button — always re-taps.
   function feed(payload) { queueOrFeed({ kind: "curves", data: payload }, true); }
 
   // feedText: a Coldcard export (seed or descriptor) tapped in as plain text.
