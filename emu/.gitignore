@@ -1,0 +1,5 @@
+# Build outputs (produced by build.sh; served/bundled by the deploy).
+emu.wasm
+wasm_exec.js
+# Firmware checkout the replace directive points at (symlink or CI checkout).
+/firmware

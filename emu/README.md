@@ -1,0 +1,40 @@
+# wasmemu — browser firmware emulator
+
+Runs the unmodified SeedHammer II GUI (`seedhammer.com/gui`) as WebAssembly on
+a canvas. It is a `GOOS=js` build of the real firmware, so what you see is what
+the device draws: the same screens, the same scan funnel, the same curves
+engraving planner. SeedHammer Studio embeds it as a tab; `index.html` is a
+standalone host for local runs.
+
+## Build
+
+```
+./build.sh          # writes ./emu.wasm (git-ignored) and ./wasm_exec.js
+```
+
+`emu.wasm` and `wasm_exec.js` are build outputs, never committed. In CI they are
+published as Release assets that Studio fetches by pinned digest; `wasm_exec.js`
+must come from the same Go that built `emu.wasm`.
+
+## Host bridge
+
+The host page registers a few `window` globals the emulator calls (or calls
+into):
+
+- `seedhammerBlit(pixels, x, y, w, h)` — Go paints a dirty screen chunk.
+- `seedhammerTouch(x, y, pressed)` — the only navigation input; SeedHammer II is
+  a touch device.
+- `seedhammerSynthTap(bytes)` — deliver a complete NDEF message as if a tag were
+  scanned. The host builds it: a `seedhammer.com:curves` record for a Studio
+  editor payload, or a Well-Known Text record for a seed / descriptor / plain
+  text. `Platform.NFCReader` parses it back through the production `nfc/ndef`
+  readers, so the firmware scan funnel runs unchanged.
+
+## Status / follow-ups
+
+- Ported off the retired SH2E `engrave/wire` format onto `curves` (2026-07-20).
+  Boots and renders the live firmware UI.
+- The offline SVG plate-dump panel from the old combined sim is not carried yet;
+  the emulator renders everything on the canvas.
+- The interactive tap→engrave flow is wired; drive it into the scan screen to
+  exercise it end to end.

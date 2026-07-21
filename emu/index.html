@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SeedHammer II emulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { margin:0; min-height:100vh; background:#0f1013; color:#d8dade;
+    font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:14px; padding:22px; box-sizing:border-box; }
+  h1 { font-size:15px; font-weight:600; margin:0; color:#99a1aa; }
+  canvas { image-rendering:pixelated; width:480px; max-width:100%; aspect-ratio:480/320;
+    background:#000; border-radius:10px; touch-action:none; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  .row { display:flex; gap:8px; width:480px; max-width:100%; }
+  input { flex:1; font:inherit; padding:7px 10px; border-radius:8px; border:1px solid #2a2e35;
+    background:#181a1f; color:inherit; }
+  button { font:inherit; padding:7px 14px; border-radius:8px; border:1px solid #2a2e35;
+    background:#23262d; color:inherit; cursor:pointer; }
+  p { color:#6b727c; font-size:12.5px; max-width:480px; text-align:center; margin:0; }
+</style>
+<h1>SeedHammer II emulator</h1>
+<canvas id="screen" width="480" height="320"></canvas>
+<div class="row">
+  <input id="tap" placeholder="Tap a scan: a seed, a descriptor, or plate text…">
+  <button id="send">Tap →</button>
+</div>
+<p>The real firmware GUI on a canvas. Drag to navigate (it is a touch device). The
+tap box feeds an NDEF Well-Known Text record, exactly as a scanned tag would.</p>
+
+<script src="wasm_exec.js"></script>
+<script>
+"use strict";
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+// Go paints the firmware screen here, one dirty chunk per call.
+window.seedhammerBlit = (pixels, x, y, w, h) => ctx.putImageData(new ImageData(pixels, w, h), x, y);
+
+// Drag = the touch navigation the device uses; there is no other input.
+function at(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(canvas.width - 1, Math.floor((e.clientX - r.left) * canvas.width / r.width))),
+    y: Math.max(0, Math.min(canvas.height - 1, Math.floor((e.clientY - r.top) * canvas.height / r.height))),
+  };
+}
+let down = false;
+canvas.addEventListener("pointerdown", e => { down = true; const p = at(e); window.seedhammerTouch?.(p.x, p.y, true); });
+window.addEventListener("pointerup", e => { if (!down) return; down = false; const p = at(e); window.seedhammerTouch?.(p.x, p.y, false); });
+window.addEventListener("pointermove", e => { if (!down) return; const p = at(e); window.seedhammerTouch?.(p.x, p.y, true); });
+
+// Build a TLV-wrapped NDEF Well-Known Text record — the byte shape
+// Platform.NFCReader (nfc/ndef) parses, matching a real Type-4 tag read.
+function ndefText(s) {
+  const t = new TextEncoder().encode(s);
+  const payload = new Uint8Array(3 + t.length);
+  payload[0] = 0x02; payload[1] = 0x65; payload[2] = 0x6e; // UTF-8, lang "en"
+  payload.set(t, 3);
+  let rec;
+  if (payload.length < 256) {
+    rec = [0xD1, 0x01, payload.length, 0x54, ...payload];           // MB|ME|SR|WellKnown, type 'T'
+  } else {
+    const n = payload.length;
+    rec = [0xC1, 0x01, (n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255, 0x54, ...payload];
+  }
+  let tlv;
+  if (rec.length < 0xff) tlv = [0x03, rec.length, ...rec, 0xFE];    // NDEF TLV + terminator
+  else tlv = [0x03, 0xFF, (rec.length >>> 8) & 255, rec.length & 255, ...rec, 0xFE];
+  return new Uint8Array(tlv);
+}
+document.getElementById("send").onclick = () => {
+  const s = document.getElementById("tap").value.trim();
+  if (s) window.seedhammerSynthTap?.(ndefText(s));
+};
+
+const go = new Go();
+WebAssembly.instantiateStreaming(fetch("emu.wasm"), go.importObject)
+  .then(r => go.run(r.instance))
+  .catch(async () => {
+    // Dev servers that don't send application/wasm.
+    const buf = await (await fetch("emu.wasm")).arrayBuffer();
+    const r = await WebAssembly.instantiate(buf, go.importObject);
+    go.run(r.instance);
+  });
+</script>
