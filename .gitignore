@@ -10,8 +10,7 @@ dist/
 /emu.wasm
 /wasm_exec.js
 
-# Coldcard emulator build outputs (coldcard/build.sh); served from the root,
-# fetched lazily by coldcard.js. Never committed.
+# Local build outputs, never committed.
 /coldcard-mpy-*.mjs
 /coldcard-mpy-*.wasm
 
@@ -20,8 +19,6 @@ dist/
 __pycache__/
 *.pyc
 
-# Coldcard emulator: removed from the public repo (Coinkite feedback) but kept
-# locally. The source, the tab controller, and the built wasm stay on disk,
-# untracked. Restore the integration from the local `coldcard-local` branch.
+# Local-only dev tree, kept out of the published site.
 /coldcard/
 /coldcard.js
