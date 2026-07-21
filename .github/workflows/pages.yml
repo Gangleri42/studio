@@ -43,7 +43,7 @@ jobs:
       # all of Studio; bump both together (and re-verify the emu still builds)
       # when the gui API the emu implements changes. See emu/README.md.
       FIRMWARE_REPO: Gangleri42/seedhammer
-      FIRMWARE_REF: ae0dacbd003ce5a8614ea5ccba8db7675e524661
+      FIRMWARE_REF: 3d96cfbbc1d772b44e1f95f73539e63432507bab
     steps:
       - uses: actions/checkout@v6
 

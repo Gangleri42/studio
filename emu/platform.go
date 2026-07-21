@@ -195,6 +195,21 @@ func (p *Platform) HardwareVersion() string { return "emu" }
 // the emulator never exposes. Return success so a stray call doesn't crash.
 func (p *Platform) LockBoot() error { return nil }
 
+// RecordPlate is the optional gui plateRecorder seam: NewEngraveScreen hands
+// us the planned plate for every engrave (seed, descriptor, text, curves). We
+// render it to an SVG resembling the steel and pass it to the host page's
+// seedhammerPlateSVG sink. This is a DISPLAY/DOWNLOAD artifact only — it never
+// re-enters any NFC path, so emulator test material can never reach a machine.
+func (p *Platform) RecordPlate(plate gui.Plate) {
+	sink := js.Global().Get("seedhammerPlateSVG")
+	if sink.IsUndefined() {
+		return
+	}
+	if svg := vectorizePlate(plate.Spline, engraverParams); len(svg) > 0 {
+		sink.Invoke(string(svg))
+	}
+}
+
 // The nfcReader/ndefReader tap plumbing lives in nfc.go, free of the js
 // build constraint so a host test can drive it.
 

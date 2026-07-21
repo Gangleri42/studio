@@ -57,6 +57,32 @@
       const p = at(e);
       window.seedhammerTouch && window.seedhammerTouch(p.x, p.y, true);
     });
+
+    installPlateSink();
+  }
+
+  // The firmware's engrave step hands the emulator the planned plate (via the
+  // gui plateRecorder seam), which RecordPlate renders to an SVG resembling the
+  // steel and pushes here. Display + download only — it never re-enters an NFC
+  // path. Registered before the wasm boots so it's present when engrave fires.
+  let plateUrl = null;
+  function installPlateSink() {
+    window.seedhammerPlateSVG = (svg) => {
+      if (plateUrl) URL.revokeObjectURL(plateUrl);
+      plateUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      const holder = document.getElementById("emuPlateSvg");
+      if (holder) holder.innerHTML = '<img alt="Engraved plate preview" src="' + plateUrl + '">';
+      const panel = document.getElementById("emuPlate");
+      if (panel) panel.hidden = false;
+    };
+    const dl = document.getElementById("emuPlateDl");
+    if (dl) dl.onclick = () => {
+      if (!plateUrl) return;
+      const a = document.createElement("a");
+      a.href = plateUrl;
+      a.download = "seedhammer-plate.svg";
+      a.click();
+    };
   }
 
   function loadScript(src) {

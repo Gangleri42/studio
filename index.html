@@ -166,6 +166,16 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
 #emuScreen:active { cursor: grabbing; }
 .deviceCtl { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 12px; }
 .devhint { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+/* the engraved-plate SVG dump on the SeedHammer tab */
+.platePanel { display: flex; flex-direction: column; gap: 9px; padding-top: 6px; border-top: 1px solid var(--hair); }
+.plateHead { display: flex; align-items: center; justify-content: space-between; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.plateHead button { appearance: none; font: inherit; font-size: 12px; text-transform: none; letter-spacing: 0;
+  padding: 5px 12px; border-radius: 9px; border: 1px solid var(--hair); background: var(--glass-2);
+  color: var(--ink); cursor: pointer; }
+.plateHead button:active { transform: scale(.97); }
+.plateSvg { border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; background: #eceef2; }
+.plateSvg img { display: block; width: 100%; height: auto; }
 /* Coldcard: an original device frame (no Coinkite product photos). */
 .ccBody { width: 300px; max-width: 100%; background: linear-gradient(160deg, #26292f, #15171b);
   border: 1px solid var(--hair); border-radius: 22px; padding: 20px 20px 24px;
@@ -277,6 +287,12 @@ Keep *offline*. Verify _keys_.
             to navigate — it's a touch device. <b>Load composed plate</b> taps whatever you
             designed on the Text, Rich, or Graphics tabs into this emulator, exactly as a scanned
             NFC tag would. It never reaches a real machine — “Send” on the editor tabs does that.</p>
+          <div class="platePanel" id="emuPlate" hidden>
+            <div class="plateHead"><span>Engraved plate (SVG)</span><button id="emuPlateDl">Download</button></div>
+            <div class="plateSvg" id="emuPlateSvg"></div>
+            <p class="devhint">The vector plate the firmware just planned, resembling the engraved
+              steel. Produced when you reach the engrave step — a downloadable artifact, nothing more.</p>
+          </div>
         </div>
       </div>
     </section>
