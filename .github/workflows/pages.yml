@@ -30,13 +30,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Firmware commit the emulator is compiled against. Pinned (not `main`)
-      # so unrelated firmware edits never change the deployed emu.wasm. Kept
-      # equal to glyphs-drift.yml's FIRMWARE_REF — one firmware version backs
-      # all of Studio; bump both together (and re-verify the emu still builds)
-      # when the gui API the emu implements changes. See emu/README.md.
+      # Firmware commit the emulator AND the curves cost model (studio-core.wasm)
+      # are compiled against. Pinned (not `main`) so unrelated firmware edits
+      # never change the deployed wasm. Kept equal to glyphs-drift.yml's
+      # FIRMWARE_REF — one firmware version backs all of Studio; bump both
+      # together (and re-verify emu + core still build) when the gui or curves
+      # API they use changes. See emu/README.md.
       FIRMWARE_REPO: Gangleri42/seedhammer
-      FIRMWARE_REF: 3d96cfbbc1d772b44e1f95f73539e63432507bab
+      FIRMWARE_REF: 997792abbb4863308aadb7bd0a46d6f73d1c931a
     steps:
       - uses: actions/checkout@v6
 
@@ -65,6 +66,17 @@ jobs:
             echo "::warning::SeedHammer emu.wasm failed to build against firmware ${FIRMWARE_REF}. The editor and text composer still deploy; the SeedHammer tab shows a load error until this is fixed."
           fi
 
+      # The curves cost model for the canvas editor's firmware-exact gauges.
+      # Same pinned firmware; non-fatal — the editor still deploys and the
+      # path-mode gauges fall back to a JS estimate if this is absent.
+      - name: Build the curves cost model (studio-core.wasm)
+        run: |
+          if FIRMWARE_DIR="$GITHUB_WORKSPACE/_firmware" ./core/build.sh; then
+            echo "studio-core.wasm built."
+          else
+            echo "::warning::studio-core.wasm failed to build against firmware ${FIRMWARE_REF}. The editor still deploys; the canvas gauges fall back to a JS estimate."
+          fi
+
       - name: Assemble Pages tree
         run: |
           set -euo pipefail
@@ -75,7 +87,7 @@ jobs:
           # the published site.
           cp index.html glyphs.js sw.js manifest.webmanifest \
              icon.svg icon-192.png icon-512.png icon-maskable.png \
-             nfc-bus.js emu.js dist/
+             nfc-bus.js emu.js canvas.js tracer.js studio-core.js dist/
 
           # SeedHammer emulator wasm + the wasm_exec.js from the exact Go that
           # built it (they must match). Non-fatal: if the build above failed
@@ -85,6 +97,15 @@ jobs:
             echo "SeedHammer emu.wasm staged ($(wc -c < dist/emu.wasm) bytes)."
           else
             echo "::warning::emu.wasm/wasm_exec.js absent; the SeedHammer tab will show a load error."
+          fi
+
+          # Curves cost model for the canvas editor's firmware-exact gauges.
+          # Shares wasm_exec.js with the emu; stage it if the emu step didn't.
+          if cp studio-core.wasm dist/ 2>/dev/null; then
+            echo "studio-core.wasm staged ($(wc -c < dist/studio-core.wasm) bytes)."
+            [ -f dist/wasm_exec.js ] || cp wasm_exec.js dist/ 2>/dev/null || true
+          else
+            echo "::warning::studio-core.wasm absent; canvas gauges use a JS estimate."
           fi
 
           # Plain-text composer under /textplate/.

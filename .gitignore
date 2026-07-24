@@ -4,10 +4,11 @@ glyphs.gen.js
 # Pages build output.
 dist/
 
-# Emulator build outputs: produced by emu/build.sh and copied to the site
-# root by the Pages deploy (emu.js fetches them relative to the page). Never
-# committed — see emu/.gitignore for the in-tree copies.
+# Emulator + core build outputs: produced by emu/build.sh and core/build.sh
+# and copied to the site root by the Pages deploy (fetched relative to the
+# page). Never committed — see emu/.gitignore and core/.gitignore.
 /emu.wasm
+/studio-core.wasm
 /wasm_exec.js
 
 # Local build outputs, never committed.

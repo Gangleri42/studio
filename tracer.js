@@ -101,31 +101,63 @@ window.Tracer = (function () {
         if (del.length) { changed = true; for (const idx of del) bin[idx] = 0; }
       }
     }
-    // walk the skeleton: classify by 8-neighbour count, trace edges endpoint->junction
-    const nb = (x, y) => { let n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && at(x + dx, y + dy)) n++; return n; };
     const N8 = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+    const deg = (x, y) => { let n = 0; for (const [dx, dy] of N8) if (at(x + dx, y + dy)) n++; return n; };
     const used = new Uint8Array(w * h), segs = [];
-    const nodes = [];
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bin[y * w + x]) { const n = nb(x, y); if (n === 1 || n >= 3) nodes.push([x, y]); }
-    const walk = (x, y) => {
-      const line = [[x, y]]; let px = x, py = y, first = true;
-      while (true) {
-        let nx = -1, ny = -1;
-        for (const [dx, dy] of N8) { const ax = px + dx, ay = py + dy; if (at(ax, ay) && !used[ay * w + ax]) { nx = ax; ny = ay; break; } }
-        if (nx < 0) break;
-        used[ny * w + nx] = 1; line.push([nx, ny]);
-        const deg = nb(nx, ny); px = nx; py = ny;
-        if (deg !== 2) break; // stop at junction/endpoint
+    // Trace a stroke from (sx,sy): at each step continue to the unused
+    // neighbour that best preserves the current heading, so the path runs
+    // straight THROUGH self-crossings and diagonal staircases instead of
+    // splitting at every pixel an 8-neighbour count mistakes for a junction.
+    // That keeps a signature a few long strokes, not dozens of gapped stubs.
+    const trace = (sx, sy) => {
+      const line = [[sx, sy]]; used[sy * w + sx] = 1;
+      let px = sx, py = sy, hx = 0, hy = 0;
+      for (;;) {
+        let best = null, score = -Infinity;
+        for (const [ex, ey] of N8) {
+          const ax = px + ex, ay = py + ey; if (!at(ax, ay) || used[ay * w + ax]) continue;
+          const l = Math.hypot(ex, ey), ux = ex / l, uy = ey / l;
+          const s = (hx || hy) ? hx * ux + hy * uy : 0; // prefer straight ahead
+          if (s > score) { score = s; best = [ax, ay, ux, uy]; }
+        }
+        if (!best) break;
+        used[best[1] * w + best[0]] = 1; line.push([best[0], best[1]]);
+        hx = best[2]; hy = best[3]; px = best[0]; py = best[1];
       }
       return line;
     };
-    for (const [x, y] of nodes) { used[y * w + x] = 1; }
-    for (const [x, y] of nodes) for (const [dx, dy] of N8) { const ax = x + dx, ay = y + dy; if (at(ax, ay) && !used[ay * w + ax]) { used[ay * w + ax] = 1; const line = [[x, y], [ax, ay]].concat(walk(ax, ay).slice(1)); pushLine(segs, line, eps); } }
-    // any remaining unused ink = closed loops with no endpoint
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bin[y * w + x] && !used[y * w + x]) { used[y * w + x] = 1; const line = [[x, y]].concat(walk(x, y).slice(1)); pushLine(segs, line, eps); }
+    // Start at endpoints (a clean stroke ends at a degree-1 pixel); then trace
+    // whatever is left (closed loops that have no endpoint).
+    const starts = [], lines = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bin[y * w + x] && deg(x, y) === 1) starts.push([x, y]);
+    for (const [x, y] of starts) if (!used[y * w + x]) { const l = trace(x, y); if (l.length >= 2) lines.push(l); }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bin[y * w + x] && !used[y * w + x]) { const l = trace(x, y); if (l.length >= 2) lines.push(l); }
+    // Bridge the ~1px gaps where two traces met at a crossing (endpoints within
+    // JOIN px). The threshold is small, so genuine pen-lifts stay separate.
+    for (const l of joinLines(lines, 2.5)) pushLine(segs, l, eps);
     return segs;
   }
   function pushLine(segs, line, eps) { if (line.length < 2) return; let l = rdp(line.map(p => [p[0] + 0.5, p[1] + 0.5]), eps); if (l.length < 2) return; segs.push({ op: "M", p: [l[0]] }); for (let i = 1; i < l.length; i++) segs.push({ op: "L", p: [l[i]] }); }
+  // Chain polylines whose endpoints nearly touch into longer runs, so a stroke
+  // that the tracer split at a crossing becomes one continuous line again.
+  function joinLines(lines, d) {
+    lines = lines.filter(l => l.length >= 2); const d2 = d * d;
+    const near = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1]; return dx * dx + dy * dy <= d2; };
+    let merged = true;
+    while (merged) {
+      merged = false;
+      for (let i = 0; i < lines.length && !merged; i++) for (let j = i + 1; j < lines.length; j++) {
+        const A = lines[i], B = lines[j], aS = A[0], aE = A[A.length - 1], bS = B[0], bE = B[B.length - 1];
+        if (near(aE, bS)) { lines[i] = A.concat(B); }
+        else if (near(aE, bE)) { lines[i] = A.concat(B.slice().reverse()); }
+        else if (near(aS, bE)) { lines[i] = B.concat(A); }
+        else if (near(aS, bS)) { lines[i] = A.slice().reverse().concat(B); }
+        else continue;
+        lines.splice(j, 1); merged = true; break;
+      }
+    }
+    return lines;
+  }
 
   // ---- Ramer-Douglas-Peucker ---------------------------------------------
   function rdp(points, eps) {
