@@ -183,6 +183,39 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
   display: grid; place-items: center; padding: 8px; }
 .plateSvg img { display: block; max-width: 100%; max-height: 46vh; width: auto; height: auto; }
 [hidden] { display: none !important; }
+
+/* canvas editor */
+.tools, .styleBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tools button, .styleBar button { appearance: none; font: inherit; font-size: 14px; line-height: 1;
+  min-width: 30px; height: 30px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--hair);
+  background: var(--glass-2); color: var(--ink); cursor: pointer; transition: background .15s, border-color .15s; }
+.tools button:hover, .styleBar button:hover { border-color: var(--accent); }
+.tools button.on { background: var(--accent); color: #1a1408; border-color: transparent; }
+.styleBar button.on { background: var(--accent-soft); border-color: var(--accent); }
+.tools select { font: inherit; font-size: 12px; height: 30px; border-radius: 9px; border: 1px solid var(--hair);
+  background: var(--glass-2); color: var(--ink); padding: 0 6px; }
+.tsep { width: 1px; height: 20px; background: var(--hair); margin: 0 3px; }
+.styleBar { padding: 8px; border-radius: 12px; background: var(--glass-2); border: 1px solid var(--hair); }
+.styleBar .grp { display: inline-flex; align-items: center; gap: 6px; }
+.styleBar label { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); }
+.styleBar input[type=number], .styleBar input[type=text] { font: inherit; font-size: 12.5px; padding: 4px 7px;
+  border-radius: 8px; border: 1px solid var(--hair); background: var(--glass); color: var(--ink); width: 58px; }
+.styleBar input[type=range] { width: 96px; accent-color: var(--accent); }
+button.ghost { appearance: none; font: inherit; font-size: 12.5px; padding: 7px 12px; border-radius: 10px;
+  border: 1px solid var(--hair); background: var(--glass-2); color: var(--ink); cursor: pointer; }
+button.ghost:hover { border-color: var(--accent); }
+.cvStage { flex: 1; min-height: 260px; display: grid; place-items: stretch; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(135deg, var(--plate-a), var(--plate-b) 50%, var(--plate-c));
+  border: 1px solid var(--hair); box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); }
+#cv { width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
+.cvMargin { fill: none; stroke: var(--grid); stroke-width: .3; stroke-dasharray: 1.4 2; }
+.cvObj { cursor: move; }
+.cvObj path { pointer-events: stroke; }
+.cvBox { fill: none; stroke: var(--accent); stroke-width: .5; vector-effect: non-scaling-stroke; opacity: .9; }
+.cvH { fill: var(--page); stroke: var(--accent); stroke-width: .4; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
+.cvHm { cursor: ns-resize; }
+.cvRot { fill: var(--accent); stroke: var(--page); stroke-width: .3; vector-effect: non-scaling-stroke; cursor: grab; }
+.cvTmp { fill: none; stroke: var(--accent); stroke-width: .6; vector-effect: non-scaling-stroke; stroke-dasharray: 1.5 1.5; }
 </style>
 </head>
 <body>
@@ -191,6 +224,7 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
     <div class="brand"><img src="icon.svg" alt=""> SeedHammer <small>Studio</small></div>
     <div class="seg" role="tablist">
       <button role="tab" aria-selected="true" data-mode="text">Text</button>
+      <button role="tab" aria-selected="false" data-mode="canvas">Canvas</button>
       <button role="tab" aria-selected="false" data-mode="rich">Rich</button>
       <button role="tab" aria-selected="false" data-mode="svg">Graphics</button>
       <button role="tab" aria-selected="false" data-mode="emu">SeedHammer</button>
@@ -207,6 +241,47 @@ BREAK GLASS
 
 SEEDHAMMER</textarea>
         <div class="hint" id="textHint"></div>
+      </div>
+      <div data-pane="canvas" hidden style="flex-direction:column;flex:1;gap:10px;min-height:0">
+        <div class="tools" id="cvTools">
+          <button data-tool="select" class="on" title="Select (V)">▲</button>
+          <button data-tool="text" title="Text (T)">T</button>
+          <button data-tool="rect" title="Rectangle (R)">▭</button>
+          <button data-tool="ellipse" title="Ellipse (O)">◯</button>
+          <button data-tool="line" title="Line (L)">╱</button>
+          <button data-tool="pen" title="Freehand (P)">✎</button>
+          <button data-tool="poly" title="Polygon (G)">⬠</button>
+          <span class="tsep"></span>
+          <button id="cvSvg" title="Insert SVG">SVG</button>
+          <button id="cvImg" title="Insert image (trace)">IMG</button>
+          <select id="cvTraceMode" title="Trace mode"><option value="centerline">centerline</option><option value="outline">outline</option></select>
+          <span style="flex:1"></span>
+          <button id="cvUndo" title="Undo (Ctrl/Cmd+Z)">↶</button>
+          <button id="cvRedo" title="Redo (Shift+Ctrl/Cmd+Z)">↷</button>
+        </div>
+        <div class="cvStage"><svg id="cv" viewBox="0 0 85 85" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="79" height="79" class="cvMargin"/><g id="cvObjs"></g><g id="cvUI"></g></svg></div>
+        <div class="styleBar" id="cvStyle" hidden>
+          <span id="cvStyleText" class="grp">
+            <label>Size <input type="number" id="cvSize" min="1" max="40" step="0.5"> mm</label>
+            <button id="cvItalic" title="Italic"><i>i</i></button>
+            <button id="cvUnder" title="Underline"><u>U</u></button>
+            <input type="text" id="cvEdit" placeholder="text…" style="flex:1;min-width:80px">
+          </span>
+          <span id="cvStyleShape" class="grp"><label>Detail <input type="range" id="cvDetail" min="0" max="100" value="0"></label></span>
+          <span class="tsep"></span>
+          <button id="cvFlipH" title="Flip horizontal">⇋</button>
+          <button id="cvFlipV" title="Flip vertical">⤨</button>
+          <button id="cvFwd" title="Bring forward">↑</button>
+          <button id="cvBack" title="Send back">↓</button>
+          <button id="cvDup" title="Duplicate">⧉</button>
+          <button id="cvDel" title="Delete">✕</button>
+        </div>
+        <div class="row" style="margin-top:0">
+          <button id="cvAutoFit" class="ghost">Auto-fit to budget</button>
+          <button id="cvShare" class="ghost">Share link</button>
+        </div>
+        <input type="file" id="cvSvgFile" accept=".svg,image/svg+xml" hidden>
+        <input type="file" id="cvImgFile" accept="image/*" hidden>
       </div>
       <div data-pane="rich" hidden style="flex-direction:column;flex:1">
         <textarea id="md" spellcheck="false"># Cold Storage
@@ -294,6 +369,7 @@ Keep *offline*. Verify _keys_.
 
 <script src="nfc-bus.js"></script>
 <script src="emu.js"></script>
+<script src="tracer.js"></script>
 <script>
 "use strict";
 // ---- caps from generated glyphs.js (single-sourced from the curves package) ----
@@ -513,7 +589,7 @@ function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,
 let payload='', ok=false, sendKind='path';
 // Text/Rich/Graphics compose a payload; SeedHammer is a device tab that
 // consumes the last composed payload rather than editing it.
-const EDITOR_MODES=['text','rich','svg'];
+const EDITOR_MODES=['text','canvas','rich','svg'];
 function mode(){return document.querySelector('[role=tab][aria-selected=true]').dataset.mode;}
 function recompute(){
   const m=mode();
@@ -535,6 +611,9 @@ function recompute(){
         (tSize?`${tCols}×${tRows} · engraves at ${tSize.mm.toFixed(1)} mm`:'✕ '+err):'';
       document.getElementById('textHint').className='hint'+(err?' bad':'');
       document.getElementById('text').classList.toggle('bad',!!err);
+    } else if(m==='canvas'){
+      segs=window.Canvas?window.Canvas.worldSegs():[];
+      sendKind='path'; payload=emit(segs);
     } else if(m==='rich'){
       segs=renderMD(document.getElementById('md').value,parseFloat(document.getElementById('bodyMM').value)||5);
       sendKind='path'; payload=emit(segs);
@@ -591,10 +670,12 @@ function selectTab(m){
   });
   if(editing){
     document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==m;p.style.display=p.hidden?'none':'flex';});
-    document.getElementById('editorTitle').textContent={text:'Text plate',rich:'Rich text',svg:'Graphics'}[m];
+    document.getElementById('editorTitle').textContent={text:'Text plate',canvas:'Canvas',rich:'Rich text',svg:'Graphics'}[m];
     // the cell grid is a text-plate concept; hide the toggle elsewhere
     document.getElementById('gridChip').style.display=m==='text'?'inline-flex':'none';
     recompute();
+    // the canvas surface needs a live (visible) CTM to place handles
+    if(m==='canvas'&&window.Canvas)window.Canvas.refresh();
   }else if(m==='emu'){
     window.SeedHammerEmu.activate(payload);
   }
@@ -645,5 +726,6 @@ if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch((
 
 recompute();
 </script>
+<script src="canvas.js"></script>
 </body>
 </html>
