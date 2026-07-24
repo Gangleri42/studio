@@ -1,0 +1,4 @@
+# The wasm build outputs live at the repo root (see the root .gitignore:
+# /studio-core.wasm and /wasm_exec.js). This dir only holds the firmware
+# checkout the replace directive points at.
+/firmware

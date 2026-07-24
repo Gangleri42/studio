@@ -204,7 +204,14 @@ pre { margin-top: 8px; max-height: 120px; overflow: auto; font: 11px/1.5 ui-mono
 button.ghost { appearance: none; font: inherit; font-size: 12.5px; padding: 7px 12px; border-radius: 10px;
   border: 1px solid var(--hair); background: var(--glass-2); color: var(--ink); cursor: pointer; }
 button.ghost:hover { border-color: var(--accent); }
-.cvStage { flex: 1; min-height: 260px; display: grid; place-items: stretch; border-radius: 16px; overflow: hidden;
+button.ghost.danger:hover { border-color: var(--bad); color: var(--bad); }
+/* The plate is 85x85mm, so the drawing box must be 1:1 (else the square SVG
+   letterboxes inside a stretched rectangle). cvStageBox fills the remaining
+   column space and centres the largest square that fits its width AND height,
+   so it stays square whatever the window size. */
+.cvStageBox { flex: 1 1 auto; min-height: 0; container-type: size; display: grid; place-items: center; }
+.cvStage { width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); display: grid; place-items: stretch;
+  border-radius: 16px; overflow: hidden;
   background: linear-gradient(135deg, var(--plate-a), var(--plate-b) 50%, var(--plate-c));
   border: 1px solid var(--hair); box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); }
 #cv { width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
@@ -216,6 +223,11 @@ button.ghost:hover { border-color: var(--accent); }
 .cvHm { cursor: ns-resize; }
 .cvRot { fill: var(--accent); stroke: var(--page); stroke-width: .3; vector-effect: non-scaling-stroke; cursor: grab; }
 .cvTmp { fill: none; stroke: var(--accent); stroke-width: .6; vector-effect: non-scaling-stroke; stroke-dasharray: 1.5 1.5; }
+.cvMark { fill: none; stroke: var(--accent); stroke-width: .5; vector-effect: non-scaling-stroke; stroke-dasharray: 1.2 1.2; opacity: .85; }
+.cvSnap { stroke: var(--ok); stroke-width: .4; vector-effect: non-scaling-stroke; stroke-dasharray: 2 2; opacity: .8; }
+.cvInline { position: absolute; z-index: 5; min-width: 120px; min-height: 34px; padding: 5px 7px; border-radius: 8px;
+  border: 1px solid var(--accent); background: var(--page); color: var(--ink);
+  font: 13px/1.4 ui-monospace, Menlo, monospace; resize: both; box-shadow: var(--shadow); }
 </style>
 </head>
 <body>
@@ -259,7 +271,7 @@ SEEDHAMMER</textarea>
           <button id="cvUndo" title="Undo (Ctrl/Cmd+Z)">↶</button>
           <button id="cvRedo" title="Redo (Shift+Ctrl/Cmd+Z)">↷</button>
         </div>
-        <div class="cvStage"><svg id="cv" viewBox="0 0 85 85" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="79" height="79" class="cvMargin"/><g id="cvObjs"></g><g id="cvUI"></g></svg></div>
+        <div class="cvStageBox"><div class="cvStage"><svg id="cv" viewBox="0 0 85 85" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="79" height="79" class="cvMargin"/><g id="cvObjs"></g><g id="cvUI"></g></svg></div></div>
         <div class="styleBar" id="cvStyle" hidden>
           <span id="cvStyleText" class="grp">
             <label>Size <input type="number" id="cvSize" min="1" max="40" step="0.5"> mm</label>
@@ -269,6 +281,8 @@ SEEDHAMMER</textarea>
           </span>
           <span id="cvStyleShape" class="grp"><label>Detail <input type="range" id="cvDetail" min="0" max="100" value="0"></label></span>
           <span class="tsep"></span>
+          <button id="cvGroup" title="Group (Ctrl/Cmd+G)" hidden>⊞ group</button>
+          <button id="cvUngroup" title="Ungroup (Ctrl/Cmd+Shift+G)" hidden>⊟ ungroup</button>
           <button id="cvFlipH" title="Flip horizontal">⇋</button>
           <button id="cvFlipV" title="Flip vertical">⤨</button>
           <button id="cvFwd" title="Bring forward">↑</button>
@@ -279,6 +293,7 @@ SEEDHAMMER</textarea>
         <div class="row" style="margin-top:0">
           <button id="cvAutoFit" class="ghost">Auto-fit to budget</button>
           <button id="cvShare" class="ghost">Share link</button>
+          <button id="cvClear" class="ghost danger">Clear</button>
         </div>
         <input type="file" id="cvSvgFile" accept=".svg,image/svg+xml" hidden>
         <input type="file" id="cvImgFile" accept="image/*" hidden>
@@ -625,13 +640,33 @@ function recompute(){
     }
   }catch(e){err=String(e.message||e);segs=[];payload='';}
   const gridCtx=m==='text'?(tSize||SH.sizes[SH.sizes.length-1]):null;
-  draw(segs,gridCtx);
+  // When the cost model has loaded, draw the spline the device actually cuts
+  // (planner-resampled, corner-clamped) rather than the raw input paths.
+  let drawSegs=segs;
+  if(sendKind==='path'&&payload&&window.studioCoreReport){
+    const rep=window.studioCoreReport(payload);
+    if(rep&&rep.plan){const pl=plannedToSegs(rep.plan);if(pl&&pl.length)drawSegs=pl;}
+  }
+  draw(drawSegs,gridCtx);
   gauges(m,segs,err,tCols,tRows,tSize);
 }
+// planned strokes (JSON [[[x,y],...],...] in mm) -> M/L segs for draw().
+function plannedToSegs(json){
+  try{const arr=JSON.parse(json);const out=[];
+    for(const st of arr){if(!st||st.length<2)continue;out.push({op:'M',p:[st[0]]});for(let i=1;i<st.length;i++)out.push({op:'L',p:[st[i]]});}
+    return out;
+  }catch(e){return null;}
+}
 function gauges(m,segs,err,tCols,tRows,tSize){
-  const b=bounds(segs), strokes=segs.filter(s=>s.op==='M').length;
+  const b=bounds(segs);
   const bytes=payload?new TextEncoder().encode(payload).length:0;
-  const mins=(pathLen(segs)/ENGRAVE_MM_S)/60;
+  // Firmware-exact cost from studio-core.wasm when it has loaded: real knot
+  // caps and planned engraving time. Falls back to a JS estimate otherwise.
+  let exact=null;
+  if(sendKind==='path'&&payload&&window.studioCoreReport){try{exact=window.studioCoreReport(payload);}catch(e){exact=null;}}
+  const strokes=exact&&exact.strokes!=null?exact.strokes:segs.filter(s=>s.op==='M').length;
+  const mins=exact&&exact.seconds!=null?exact.seconds/60:(pathLen(segs)/ENGRAVE_MM_S)/60;
+  const capErr=exact?exact.error:'';
   const inPlate=!b.empty&&b.minX>=MARGIN_MM-1e-6&&b.minY>=MARGIN_MM-1e-6&&b.maxX<=PLATE_MM-MARGIN_MM+1e-6&&b.maxY<=PLATE_MM-MARGIN_MM+1e-6;
   const set=(fill,val,label,cap)=>{const el=document.getElementById(fill);const pct=cap?Math.min(100,100*val/cap):0;
     el.style.width=pct+'%';el.classList.toggle('over',val>cap);
@@ -641,17 +676,20 @@ function gauges(m,segs,err,tCols,tRows,tSize){
   // text mode: time/strokes come from the grid geometry but the send is cheap text; keep gauges informative
   const showTime=!b.empty;
   document.getElementById('mTimeRow').style.opacity=showTime?1:.4;
-  set('mTime',mins,showTime?`${Math.floor(mins)}:${String(Math.round((mins%1)*60)).padStart(2,'0')}`:'—',CAP.minutes);
+  set('mTime',mins,showTime?`${exact?'':'~'}${Math.floor(mins)}:${String(Math.round((mins%1)*60)).padStart(2,'0')}`:'—',CAP.minutes);
   document.getElementById('size').textContent=b.empty?'—':`${b.w.toFixed(0)} × ${b.h.toFixed(0)} mm`;
   document.getElementById('time').textContent=m==='text'&&tSize?`${tSize.mm.toFixed(1)} mm · grid ${tCols}×${tRows}`:'';
   const empty=b.empty&&!err;
-  const overB=bytes>CAP.bytes, overS=strokes>CAP.strokes;
-  ok=!err&&!empty&&!(m!=='text'&&(overB||overS||!inPlate));
+  const overB=bytes>CAP.bytes;
+  // Byte cap is a JS check (curves.Validate does not cover it); everything
+  // else comes from the firmware report when loaded, else a JS approximation.
+  const pathBad=exact?(overB||!!capErr):(overB||strokes>CAP.strokes||!inPlate);
+  ok=!err&&!empty&&!(m!=='text'&&pathBad);
   const v=document.getElementById('verdict'),vt=document.getElementById('verdictText');
   if(err){v.className='verdict bad';vt.textContent=err;}
   else if(empty){v.className='verdict';vt.textContent='Nothing to engrave yet';}
   else if(m==='text'){v.className='verdict';vt.textContent='Fits — sent as firmware text';}
-  else if(!ok){v.className='verdict bad';vt.textContent=overB?'Too large for the tag':overS?'Too many strokes':'Runs outside the plate';}
+  else if(!ok){v.className='verdict bad';vt.textContent=overB?'Too large for the tag':(capErr?capErr.replace(/^curves: /,''):(strokes>CAP.strokes?'Too many strokes':'Runs outside the plate'));}
   else{v.className='verdict';vt.textContent='Fits the plate and the tag';}
   document.getElementById('send').disabled=!ok||!(bridgeUp||'NDEFReader'in window);
   document.getElementById('copy').disabled=!payload;
@@ -727,5 +765,6 @@ if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch((
 recompute();
 </script>
 <script src="canvas.js"></script>
+<script src="studio-core.js"></script>
 </body>
 </html>

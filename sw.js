@@ -1,6 +1,6 @@
 // SeedHammer Studio service worker: cache the app shell and the shared
 // font data so the tool works offline once installed.
-const CACHE = 'sh-studio-v11';
+const CACHE = 'sh-studio-v13';
 const SHELL = [
   './',
   './index.html',
@@ -11,11 +11,14 @@ const SHELL = [
   './glyphs.js',
   './nfc-bus.js',
   './emu.js',
+  './canvas.js',
+  './tracer.js',
+  './studio-core.js',
 ];
-// The emulator's emu.wasm + wasm_exec.js are intentionally NOT precached:
-// several MB, fetched lazily the first time the SeedHammer tab opens. The
-// fetch handler below still caches them opportunistically once fetched, so a
-// second visit works offline.
+// The wasm blobs (emu.wasm, studio-core.wasm) and their wasm_exec.js are
+// intentionally NOT precached: several MB, fetched lazily (the emulator on
+// first tab open, the cost model shortly after load). The fetch handler below
+// caches them opportunistically once fetched, so a second visit works offline.
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

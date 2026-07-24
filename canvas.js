@@ -21,7 +21,8 @@ window.Canvas = (function () {
   const UNDO_MAX = 60;
 
   let doc = { v: 1, objects: [] };
-  let sel = null;                       // selected object id
+  let sel = null;                       // selected object id (single-object transforms)
+  let marks = [];                       // shift-click multi-selection (for grouping/move)
   let tool = "select";
   let counter = 0;
   const undo = [], redo = [];
@@ -41,13 +42,47 @@ window.Canvas = (function () {
       case "text": return textLocal(o);
       case "rect": return centered(poly([[0, 0], [o.w, 0], [o.w, o.h], [0, o.h]], 1));
       case "ellipse": return ell(0, 0, o.w / 2, o.h / 2);
-      default: return o.segs || [];      // line/poly/freehand/svg/trace: stored centered
+      case "group": { const out = []; for (const ch of o.children) { const m = affine(ch.tf); for (const s of localPaths(ch)) out.push(mapSeg(s, p => apply(m, p))); } return out; }
+      case "freehand": return smoothPath(o.pts || []);
+      default: return o.segs || [];      // line/poly/svg/trace: stored centered
     }
   }
   function centered(segs) {
     const b = bounds(segs); if (b.empty) return segs;
     const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
     return segs.map(s => mapSeg(s, ([x, y]) => [x - cx, y - cy]));
+  }
+  // Catmull-Rom through the sample points -> cubic Béziers, so freehand draws
+  // and engraves as smooth curves rather than an angular polyline.
+  function smoothPath(pts) {
+    if (pts.length < 2) return [];
+    if (pts.length === 2) return [{ op: "M", p: [pts[0]] }, { op: "L", p: [pts[1]] }];
+    const out = [{ op: "M", p: [pts[0]] }];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || pts[i + 1];
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      out.push({ op: "C", p: [c1, c2, p2] });
+    }
+    return out;
+  }
+  // Tight bounds: sample curves instead of taking their control points, so the
+  // selection box and snapping wrap rotated and curved geometry exactly.
+  const qbez = (a, b, c, t) => { const u = 1 - t; return [u * u * a[0] + 2 * u * t * b[0] + t * t * c[0], u * u * a[1] + 2 * u * t * b[1] + t * t * c[1]]; };
+  const cbez = (a, b, c, d, t) => { const u = 1 - t; return [u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0], u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]]; };
+  function flatBounds(segs) {
+    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity, pen = null;
+    const acc = (x, y) => { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); };
+    for (const s of segs) {
+      const p = s.p;
+      if (s.op === "M") { pen = p[0]; acc(pen[0], pen[1]); continue; }
+      if (s.op === "L") { acc(p[0][0], p[0][1]); pen = p[0]; continue; }
+      const e = p[p.length - 1];
+      for (let i = 1; i <= 10; i++) { const t = i / 10, q = s.op === "Q" ? qbez(pen, p[0], e, t) : cbez(pen, p[0], p[1], e, t); acc(q[0], q[1]); }
+      pen = e;
+    }
+    if (!isFinite(a)) return { minX: 0, minY: 0, maxX: 0, maxY: 0, w: 0, h: 0, empty: true };
+    return { minX: a, minY: b, maxX: c, maxY: d, w: c - a, h: d - b, empty: false };
   }
   function textLocal(o) {
     const cellH = SH.height, asc = SH.ascent, adv = SH.advance, sc = o.sizeMM / cellH;
@@ -69,7 +104,7 @@ window.Canvas = (function () {
   // local half-extents for handles
   function halfExtent(o) {
     if (o.type === "rect" || o.type === "ellipse") return { hw: o.w / 2, hh: o.h / 2 };
-    const b = bounds(localPaths(o));
+    const b = flatBounds(localPaths(o));
     if (b.empty) return { hw: 1, hh: 1 };
     return { hw: Math.max(b.w / 2, 0), hh: Math.max(b.h / 2, 0) };
   }
@@ -106,6 +141,10 @@ window.Canvas = (function () {
   }
   function renderUI() {
     gUI.textContent = "";
+    if (marks.length > 1) {
+      for (const id of marks) { const o = doc.objects.find(x => x.id === id); if (!o) continue; const m = affine(o.tf), { hw, hh } = halfExtent(o), ph = Math.max(hw, 0.6), pv = Math.max(hh, 0.6); const cs = [[-ph, -pv], [ph, -pv], [ph, pv], [-ph, pv]].map(p => apply(m, p)); gUI.appendChild(el("polygon", { points: cs.map(c => c.join(",")).join(" "), class: "cvMark" })); }
+      return;
+    }
     const o = current(); if (!o) return;
     const m = affine(o.tf), { hw, hh } = halfExtent(o);
     const ph = Math.max(hw, 0.6), pv = Math.max(hh, 0.6);           // pad degenerate boxes
@@ -140,8 +179,15 @@ window.Canvas = (function () {
     // hit-test: a direct stroke hit, else the topmost object whose box contains p
     const hitG = ev.target.closest && ev.target.closest(".cvObj");
     const id = hitG ? hitG.getAttribute("data-id") : pickAt(p);
-    if (id) { select(id); startMove(p); }
-    else select(null);
+    if (id && ev.shiftKey) { toggleMark(id); return; }
+    if (id) { marks = []; select(id); startMove(p); }
+    else { marks = []; select(null); }
+  }
+  function toggleMark(id) {
+    const i = marks.indexOf(id);
+    if (i >= 0) marks.splice(i, 1); else marks.push(id);
+    if (marks.length === 1) { sel = marks[0]; } else if (!marks.length) sel = null;
+    renderUI(); syncStyle();
   }
   // pointer p (mm) into an object's local frame, undoing translate/rotate/scale
   function toLocal(o, p) {
@@ -164,7 +210,7 @@ window.Canvas = (function () {
     drag = { kind: h === "rot" ? "rot" : "scale", o, start: p, tf0: { ...o.tf }, h, hw, hh, size0: o.sizeMM };
   }
   function startCreate(t, p, ev) {
-    if (t === "text") { commitSnapshot(); const o = mkText("Text", p); select(o.id); setTool("select"); focusEdit(); recomputeAll(); return; }
+    if (t === "text") { commitSnapshot(); const o = mkText("Text", p); select(o.id); focusEdit(); recomputeAll(); return; }
     if (t === "poly") { addPolyVertex(p); return; }
     // rect / ellipse / line / pen: drag to size
     drag = { kind: "create", t, start: p, pts: [p] };
@@ -172,16 +218,26 @@ window.Canvas = (function () {
   function onMove(ev) {
     if (!drag) return;
     const p = toMM(ev);
-    if (drag.kind === "move") { const dx = p[0] - drag.start[0], dy = p[1] - drag.start[1]; drag.o.tf.x = drag.tf0.x + dx; drag.o.tf.y = drag.tf0.y + dy; liveTransform(drag.o); }
+    if (drag.kind === "move") { const dx = p[0] - drag.start[0], dy = p[1] - drag.start[1]; drag.o.tf.x = drag.tf0.x + dx; drag.o.tf.y = drag.tf0.y + dy; snapMove(drag.o); liveTransform(drag.o); }
     else if (drag.kind === "rot") { const o = drag.o, ctr = [o.tf.x, o.tf.y]; const ang = Math.atan2(p[1] - ctr[1], p[0] - ctr[0]) * 180 / Math.PI + 90; o.tf.rot = ev.shiftKey ? Math.round(ang / 15) * 15 : ang; liveTransform(o); renderUI(); }
     else if (drag.kind === "scale") { doScale(p, ev.shiftKey); }
     else if (drag.kind === "create") { drag.pts.push(p); previewCreate(); }
   }
   function onUp() {
     if (!drag) { return; }
+    gUI.querySelectorAll(".cvSnap").forEach(n => n.remove());
     if (drag.kind === "create") finishCreate();
     else if (drag.kind === "move" || drag.kind === "rot" || drag.kind === "scale") { commitSnapshot(); recomputeAll(); }
     drag = null;
+  }
+  // snap the object's centre and edges to the margins and the plate centre
+  function snapMove(o) {
+    gUI.querySelectorAll(".cvSnap").forEach(n => n.remove());
+    const T = 1.4, gx = [MARGIN_MM, PLATE_MM / 2, PLATE_MM - MARGIN_MM], he = halfExtent(o);
+    const ex = he.hw * Math.abs(o.tf.sx || 1), ey = he.hh * Math.abs(o.tf.sy || 1);
+    const ax = [o.tf.x - ex, o.tf.x, o.tf.x + ex], ay = [o.tf.y - ey, o.tf.y, o.tf.y + ey];
+    for (const g of gx) { let done = false; for (const a of ax) if (Math.abs(a - g) < T) { o.tf.x += g - a; gUI.appendChild(el("line", { x1: g, y1: 0, x2: g, y2: PLATE_MM, class: "cvSnap" })); done = true; break; } if (done) break; }
+    for (const g of gx) { let done = false; for (const a of ay) if (Math.abs(a - g) < T) { o.tf.y += g - a; gUI.appendChild(el("line", { x1: 0, y1: g, x2: PLATE_MM, y2: g, class: "cvSnap" })); done = true; break; } if (done) break; }
   }
   // move/scale/rotate the live SVG group cheaply, defer the heavy preview
   function liveTransform(o) {
@@ -189,32 +245,36 @@ window.Canvas = (function () {
     if (o.type === "text" || o.type === "ellipse" || o.type === "rect") { const gp = g && g.firstChild; if (gp) gp.setAttribute("d", pathD(localPaths(o))); }
     renderUI(); previewDebounced();
   }
+  // Resize by dragging a handle. The opposite handle stays fixed (the anchor);
+  // shift locks the aspect ratio (and text always does, since stretched glyphs
+  // look wrong). Works in the object's rotated frame, so it is correct at any
+  // rotation, and negative scale past the anchor mirrors, as expected.
   function doScale(p, uniform) {
-    const o = drag.o, r = (drag.tf0.rot || 0) * Math.PI / 180, ux = [Math.cos(r), Math.sin(r)], uy = [-Math.sin(r), Math.cos(r)];
+    const o = drag.o, r = (drag.tf0.rot || 0) * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
     const hw = drag.hw, hh = drag.hh, m0 = affine(drag.tf0);
-    const localCorners = { c0: [-hw, -hh], c1: [hw, -hh], c2: [hw, hh], c3: [-hw, hh], m0: [0, -hh], m1: [hw, 0], m2: [0, hh], m3: [-hw, 0] };
-    // anchor = opposite handle in world space
-    const opp = { c0: "c2", c1: "c3", c2: "c0", c3: "c1", m0: "m2", m1: "m3", m2: "m0", m3: "m1" }[drag.h];
-    const A = apply(m0, localCorners[opp]);
-    const dvec = [p[0] - A[0], p[1] - A[1]];
-    const wproj = dvec[0] * ux[0] + dvec[1] * ux[1], hproj = dvec[0] * uy[0] + dvec[1] * uy[1];
-    const axis = drag.h[0] === "m" ? (drag.h === "m1" || drag.h === "m3" ? "x" : "y") : "both";
-    let newW = Math.abs(wproj), newH = Math.abs(hproj);
-    const locW = 2 * hw || 1, locH = 2 * hh || 1;
-    let sx = axis === "y" ? drag.tf0.sx : (newW / locW) * Math.sign(wproj || 1) * Math.sign(drag.tf0.sx);
-    let sy = axis === "x" ? drag.tf0.sy : (newH / locH) * Math.sign(hproj || 1) * Math.sign(drag.tf0.sy);
-    if (uniform && axis === "both") { const f = Math.max(Math.abs(sx), Math.abs(sy)); sx = f * Math.sign(sx); sy = f * Math.sign(sy); }
-    // new center = midpoint(anchor, dragged corner target)
-    const dragLocalScaled = axis === "y" ? [localCorners[drag.h][0] * (drag.tf0.sx / 1), 0] : null; // unused
-    const target = p, cx = (A[0] + target[0]) / 2, cy = (A[1] + target[1]) / 2;
-    if (o.type === "text") {
-      const f = axis === "y" ? Math.abs(sy) / Math.abs(drag.tf0.sy || 1) : Math.abs(sx) / Math.abs(drag.tf0.sx || 1);
+    // per handle: the dragged corner's local sign (cx,cy) and which axes it drives
+    const H = {
+      c0: { cx: -1, cy: -1, ax: 1, ay: 1 }, c1: { cx: 1, cy: -1, ax: 1, ay: 1 }, c2: { cx: 1, cy: 1, ax: 1, ay: 1 }, c3: { cx: -1, cy: 1, ax: 1, ay: 1 },
+      m0: { cx: 0, cy: -1, ax: 0, ay: 1 }, m1: { cx: 1, cy: 0, ax: 1, ay: 0 }, m2: { cx: 0, cy: 1, ax: 0, ay: 1 }, m3: { cx: -1, cy: 0, ax: 1, ay: 0 },
+    }[drag.h];
+    // anchor = the opposite handle, held fixed in world space
+    const A = apply(m0, [H.ax ? -H.cx * hw : 0, H.ay ? -H.cy * hh : 0]);
+    const dv = [p[0] - A[0], p[1] - A[1]];
+    const dux = dv[0] * co + dv[1] * si, duy = -dv[0] * si + dv[1] * co; // project onto local axes
+    let sx = H.ax ? (dux * H.cx) / (2 * hw || 1) : (drag.tf0.sx || 1);
+    let sy = H.ay ? (duy * H.cy) / (2 * hh || 1) : (drag.tf0.sy || 1);
+    const isText = o.type === "text";
+    if ((uniform || isText) && H.ax && H.ay) { const f = Math.max(Math.abs(sx), Math.abs(sy)) || 0.01; sx = f * (sx < 0 ? -1 : 1); sy = f * (sy < 0 ? -1 : 1); }
+    const place = (hwN, hhN) => {
+      const vx = H.ax ? sx * H.cx * hwN : 0, vy = H.ay ? sy * H.cy * hhN : 0;
+      o.tf.x = A[0] + co * vx - si * vy; o.tf.y = A[1] + si * vx + co * vy;
+    };
+    if (isText) {
+      const f = Math.max(Math.abs(sx), Math.abs(sy)) || 0.01;
       o.sizeMM = Math.max(0.8, (drag.size0 || o.sizeMM) * f);
-      o.tf.sx = Math.sign(drag.tf0.sx); o.tf.sy = Math.sign(drag.tf0.sy);
-      // keep anchor fixed for text: reposition center from new extent
-      const he = halfExtent(o), nm = { ...o.tf, x: 0, y: 0 }, am = affine(nm), ac = apply(am, [he.hw * Math.sign(-localCorners[drag.h][0] || 1), he.hh * Math.sign(-localCorners[drag.h][1] || 1)]);
-      o.tf.x = A[0] - ac[0]; o.tf.y = A[1] - ac[1];
-    } else { o.tf.sx = sx || 0.01; o.tf.sy = sy || 0.01; o.tf.x = cx; o.tf.y = cy; }
+      o.tf.sx = sx < 0 ? -1 : 1; o.tf.sy = sy < 0 ? -1 : 1;
+      const he = halfExtent(o); place(he.hw, he.hh);
+    } else { o.tf.sx = sx || 0.01; o.tf.sy = sy || 0.01; place(hw, hh); }
     liveTransform(o);
   }
 
@@ -231,7 +291,7 @@ window.Canvas = (function () {
   }
   function finishPoly(closed) {
     if (polyPts && polyPts.length >= 2) { commitSnapshot(); const segs = centered(poly(polyPts, closed ? 1 : 0)); const c = bounds(poly(polyPts, 0)); addObject({ id: nextId(), type: "polygon", tf: { x: (c.minX + c.maxX) / 2, y: (c.minY + c.maxY) / 2, sx: 1, sy: 1, rot: 0 }, segs }); }
-    polyPts = null; gUI.querySelectorAll(".cvTmp").forEach(n => n.remove()); setTool("select"); render(); recomputeAll();
+    polyPts = null; gUI.querySelectorAll(".cvTmp").forEach(n => n.remove()); select(null); render(); recomputeAll();
   }
   function previewPoly() {
     gUI.querySelectorAll(".cvTmp").forEach(n => n.remove());
@@ -251,13 +311,19 @@ window.Canvas = (function () {
     const a = drag.pts[0], b = drag.pts[drag.pts.length - 1], t = drag.t;
     if (t === "pen") {
       const pts = decimate(drag.pts, 0.4); if (pts.length < 2) return;
-      commitSnapshot(); const c = bounds(poly(pts, 0)); addObject({ id: nextId(), type: "freehand", tf: { x: (c.minX + c.maxX) / 2, y: (c.minY + c.maxY) / 2, sx: 1, sy: 1, rot: 0 }, segs: centered(poly(pts, 0)) });
+      commitSnapshot(); const c = bounds(poly(pts, 0)), cx = (c.minX + c.maxX) / 2, cy = (c.minY + c.maxY) / 2;
+      const local = pts.map(([x, y]) => [x - cx, y - cy]);
+      // raw samples kept so the detail knob can re-smooth from the original.
+      addObject({ id: nextId(), type: "freehand", tf: { x: cx, y: cy, sx: 1, sy: 1, rot: 0 }, pts: local, rawPts: local.map(p => p.slice()), eps: 0 });
     } else {
       const w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]), cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2;
       if (t === "line") { if (Math.hypot(b[0] - a[0], b[1] - a[1]) < MINSZ) return; commitSnapshot(); addObject({ id: nextId(), type: "line", tf: { x: cx, y: cy, sx: 1, sy: 1, rot: 0 }, segs: centered([{ op: "M", p: [a] }, { op: "L", p: [b] }]) }); }
       else { if (w < MINSZ && h < MINSZ) return; commitSnapshot(); addObject({ id: nextId(), type: t, tf: { x: cx, y: cy, sx: 1, sy: 1, rot: 0 }, w: Math.max(w, MINSZ), h: Math.max(h, MINSZ) }); }
     }
-    const o = doc.objects[doc.objects.length - 1]; select(o.id); setTool("select"); render(); recomputeAll();
+    // Drawing tools stay active so you can keep drawing; press V or Escape to
+    // switch to Select and move or resize what you drew.
+    select(null);
+    render(); recomputeAll();
   }
 
   // ---- insert SVG / image ------------------------------------------------
@@ -281,8 +347,12 @@ window.Canvas = (function () {
   function select(id) { sel = id; renderUI(); syncStyle(); }
   function setTool(t) { tool = t; document.querySelectorAll("#cvTools [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === t)); if (t !== "poly" && polyPts) finishPoly(false); svg && (svg.style.cursor = t === "select" ? "default" : "crosshair"); }
   function syncStyle() {
-    const bar = document.getElementById("cvStyle"), o = current();
-    bar.hidden = !o; if (!o) return;
+    const bar = document.getElementById("cvStyle"), o = current(), showGroup = marks.length >= 2;
+    bar.hidden = !o && !showGroup;
+    const gb = document.getElementById("cvGroup"), ub = document.getElementById("cvUngroup");
+    if (gb) gb.hidden = !showGroup;
+    if (ub) ub.hidden = !(o && o.type === "group");
+    if (!o) { document.getElementById("cvStyleText").hidden = true; document.getElementById("cvStyleShape").hidden = true; return; }
     const isText = o.type === "text", canSimplify = o.type === "svg" || o.type === "trace" || o.type === "freehand";
     document.getElementById("cvStyleText").hidden = !isText;
     document.getElementById("cvStyleShape").hidden = !canSimplify;
@@ -294,9 +364,59 @@ window.Canvas = (function () {
   // ---- edits -------------------------------------------------------------
   function withObj(fn) { const o = current(); if (!o) return; commitSnapshot(); fn(o); render(); recomputeAll(); }
   function del() { withObj(o => { doc.objects = doc.objects.filter(x => x.id !== o.id); sel = null; }); syncStyle(); }
+  function clearAll() { if (!doc.objects.length) return; commitSnapshot(); doc.objects = []; marks = []; sel = null; render(); syncStyle(); recomputeAll(); setStatus("Canvas cleared — undo to restore"); }
   function dup() { const o = current(); if (!o) return; commitSnapshot(); const n = JSON.parse(JSON.stringify(o)); n.id = nextId(); n.tf.x += 4; n.tf.y += 4; doc.objects.push(n); select(n.id); render(); recomputeAll(); }
   function raise(dir) { const i = doc.objects.findIndex(o => o.id === sel); if (i < 0) return; const j = i + dir; if (j < 0 || j >= doc.objects.length) return; commitSnapshot(); const a = doc.objects; [a[i], a[j]] = [a[j], a[i]]; render(); recomputeAll(); }
   function flip(axis) { withObj(o => { if (axis === "h") o.tf.sx *= -1; else o.tf.sy *= -1; }); }
+
+  // ---- grouping ----------------------------------------------------------
+  function group() {
+    if (marks.length < 2) return;
+    const objs = marks.map(id => doc.objects.find(o => o.id === id)).filter(Boolean);
+    if (objs.length < 2) return;
+    commitSnapshot();
+    const all = [];
+    for (const o of objs) { const m = affine(o.tf); for (const s of localPaths(o)) all.push(mapSeg(s, p => apply(m, p))); }
+    const b = bounds(all), cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    const children = objs.map(o => { const c = JSON.parse(JSON.stringify(o)); c.tf.x -= cx; c.tf.y -= cy; return c; });
+    const ids = new Set(marks); doc.objects = doc.objects.filter(o => !ids.has(o.id));
+    const g = { id: nextId(), type: "group", tf: { x: cx, y: cy, sx: 1, sy: 1, rot: 0 }, children };
+    doc.objects.push(g); marks = []; select(g.id); render(); recomputeAll();
+  }
+  function ungroup() {
+    const g = current(); if (!g || g.type !== "group") return;
+    commitSnapshot();
+    const gm = affine(g.tf), i = doc.objects.findIndex(o => o.id === g.id);
+    const kids = g.children.map(ch => {
+      const c = JSON.parse(JSON.stringify(ch)); c.id = nextId();
+      const wp = apply(gm, [ch.tf.x, ch.tf.y]);
+      c.tf.x = wp[0]; c.tf.y = wp[1];
+      c.tf.rot = (g.tf.rot || 0) + (ch.tf.rot || 0);
+      c.tf.sx = (g.tf.sx || 1) * (ch.tf.sx || 1); c.tf.sy = (g.tf.sy || 1) * (ch.tf.sy || 1);
+      return c;
+    });
+    doc.objects.splice(i, 1, ...kids); marks = []; sel = kids.length ? kids[kids.length - 1].id : null;
+    render(); syncStyle(); recomputeAll();
+  }
+
+  // ---- in-place text editing ---------------------------------------------
+  function onDbl(ev) {
+    const id = pickAt(toMM(ev)); if (!id) return;
+    const o = doc.objects.find(x => x.id === id); if (!o || o.type !== "text") return;
+    marks = []; select(id); openInline(o);
+  }
+  function openInline(o) {
+    const stage = svg.parentElement; stage.style.position = "relative";
+    const box = svg.getBoundingClientRect(), sx = box.width / PLATE_MM, sy = box.height / PLATE_MM;
+    const c = apply(affine(o.tf), [0, 0]);
+    const ta = document.createElement("textarea"); ta.className = "cvInline"; ta.value = o.str;
+    ta.style.left = Math.max(2, c[0] * sx - 70) + "px"; ta.style.top = Math.max(2, c[1] * sy - 16) + "px";
+    stage.appendChild(ta); ta.focus(); ta.select();
+    const commit = () => { if (ta.parentNode) ta.remove(); commitSnapshot(); render(); recomputeAll(); };
+    ta.oninput = () => { o.str = ta.value; render(); recomputeAll(); };
+    ta.onblur = commit;
+    ta.onkeydown = e => { e.stopPropagation(); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ta.blur(); } if (e.key === "Escape") ta.blur(); };
+  }
 
   // ---- simplify + auto-fit -----------------------------------------------
   function rdp(points, eps) {
@@ -319,7 +439,7 @@ window.Canvas = (function () {
     }
     flush(); return out;
   }
-  function setDetail(pct) { withObj(o => { o.eps = pct / 100; o.segs = simplifySegs(o.raw || o.segs, o.eps); }); }
+  function setDetail(pct) { withObj(o => { o.eps = pct / 100; if (o.type === "freehand") o.pts = o.eps > 0 ? rdp(o.rawPts || o.pts, o.eps) : (o.rawPts || o.pts); else o.segs = simplifySegs(o.raw || o.segs, o.eps); }); }
   function decimate(pts, min) { const out = [pts[0]]; for (const p of pts) { const q = out[out.length - 1]; if (Math.hypot(p[0] - q[0], p[1] - q[1]) >= min) out.push(p); } return out; }
   function autoFit() {
     // bisect a global simplify epsilon on graphics objects until under caps
@@ -382,6 +502,7 @@ window.Canvas = (function () {
     const tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea") return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroup() : group(); return; }
     if (e.key === "Delete" || e.key === "Backspace") { if (current()) { e.preventDefault(); del(); } return; }
     const step = e.shiftKey ? 5 : 1;
     if (current() && e.key.startsWith("Arrow")) { e.preventDefault(); commitSnapshot(); const o = current(); if (e.key === "ArrowLeft") o.tf.x -= step; if (e.key === "ArrowRight") o.tf.x += step; if (e.key === "ArrowUp") o.tf.y -= step; if (e.key === "ArrowDown") o.tf.y += step; render(); recomputeAll(); return; }
@@ -397,6 +518,7 @@ window.Canvas = (function () {
     gObjs = document.getElementById("cvObjs"); gUI = document.getElementById("cvUI");
     svg.addEventListener("pointerdown", onDown);
     svg.addEventListener("pointermove", onMove);
+    svg.addEventListener("dblclick", onDbl);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("keydown", onKey);
     document.querySelectorAll("#cvTools [data-tool]").forEach(b => b.onclick = () => setTool(b.dataset.tool));
@@ -405,9 +527,10 @@ window.Canvas = (function () {
     on("cvUndo", doUndo); on("cvRedo", doRedo);
     on("cvDel", del); on("cvDup", dup); on("cvFwd", () => raise(1)); on("cvBack", () => raise(-1));
     on("cvFlipH", () => flip("h")); on("cvFlipV", () => flip("v"));
+    on("cvGroup", group); on("cvUngroup", ungroup);
     on("cvItalic", () => withObj(o => o.italic = !o.italic) || syncStyle());
     on("cvUnder", () => withObj(o => o.underline = !o.underline) || syncStyle());
-    on("cvAutoFit", autoFit); on("cvShare", shareURL);
+    on("cvAutoFit", autoFit); on("cvShare", shareURL); on("cvClear", clearAll);
     const sz = document.getElementById("cvSize"); if (sz) sz.oninput = () => withObj(o => o.sizeMM = Math.max(0.8, parseFloat(sz.value) || o.sizeMM));
     const ed = document.getElementById("cvEdit"); if (ed) ed.oninput = () => { const o = current(); if (o) { o.str = ed.value; render(); recomputeAll(); } };
     if (ed) ed.onchange = commitSnapshot;
@@ -431,6 +554,6 @@ window.Canvas = (function () {
       .then(segs => insertTrace(segs)).catch(e => setStatus("Trace: " + (e.message || e)));
   }
 
-  return { init, worldSegs, segs: worldSegs, refresh: () => { render(); syncStyle(); }, insertSVG, insertTrace, _doc: () => doc };
+  return { init, worldSegs, segs: worldSegs, refresh: () => { render(); syncStyle(); recomputeAll(); }, insertSVG, insertTrace, _doc: () => doc };
 })();
 document.addEventListener("DOMContentLoaded", () => window.Canvas.init());
