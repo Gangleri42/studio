@@ -69,6 +69,49 @@ async function run() {
     }
     await new Promise(r => setTimeout(r, 100));
   }
+  // Imported SVG must never run in the editor's origin, even when
+  // malformed geometry takes the error path. A handler that does run
+  // executes in whatever window holds the markup, so the markers set
+  // the top window, this page, and the check reads it here. The bare
+  // <img> breaks out of the SVG under the HTML parser. Synthetic
+  // markers only.
+  window.__svgImportExecuted = false;
+  const hostile = `<svg xmlns="http://www.w3.org/2000/svg" onload="top.__svgImportExecuted=true">
+    <foreignObject><img xmlns="http://www.w3.org/1999/xhtml" src="/svg-test-missing" onerror="top.__svgImportExecuted=true"/></foreignObject>
+    <use href="#absent"/>
+    <img src="/svg-test-missing-2" onerror="top.__svgImportExecuted=true">
+  </svg>`;
+  let rejected = false;
+  try { w.extractSVG(hostile); } catch (e) { rejected = true; }
+  await new Promise(r => setTimeout(r, 500));
+  let security = check('invalid imported SVG rejected', rejected, true);
+  security &= check('imported handlers never execute', window.__svgImportExecuted, false);
+  security &= check('failed import releases its isolated document',
+    w.document.getElementById('sandbox').childElementCount, 0);
+  const styled = w.extractSVG(`<svg xmlns="http://www.w3.org/2000/svg">
+    <style>.hidden { display:none }</style>
+    <rect class="hidden" width="20" height="20"/>
+    <g transform="translate(3 4)"><path d="M0 0 L2 1"/></g>
+  </svg>`);
+  security &= check('isolated SVG retains styles and transforms',
+    styled, [{op:'M',p:[[3,4]]},{op:'L',p:[[5,5]]}],
+    (got, want) => JSON.stringify(got) === JSON.stringify(want));
+  security &= check('successful import releases its isolated document',
+    w.document.getElementById('sandbox').childElementCount, 0);
+  // Isolation keeps the HTML parser's leniency: files without xmlns,
+  // with HTML entities or with unquoted attributes still import.
+  let lenient = true;
+  for (const [name, text] of [
+    ['without xmlns', '<svg><path d="M0 0 L2 1"/></svg>'],
+    ['with an HTML entity', '<svg><title>a&nbsp;b</title><path d="M0 0 L2 1"/></svg>'],
+    ['with unquoted attributes', '<svg><line x1=0 y1=0 x2=2 y2=1></svg>'],
+  ]) {
+    let got;
+    try { got = w.extractSVG(text); } catch (e) { got = String(e); }
+    lenient &= check(`SVG ${name} imports`, got, [{op:'M',p:[[0,0]]},{op:'L',p:[[2,1]]}],
+      (got, want) => JSON.stringify(got) === JSON.stringify(want));
+  }
+
   const svg = await (await fetch('fixtures/stamped.svg')).text();
 
   w.document.getElementById('cvClear').click();
@@ -101,7 +144,7 @@ async function run() {
   })()`);
   if (m.failed) throw new Error(m.failed);
 
-  let pass = true;
+  let pass = !!(security & lenient);
   // Every stamp reaches the canvas, and the <defs> template does not.
   pass &= check('outlines', m.outlines, OUTLINES);
   pass &= check('strokes', m.strokes, OUTLINES);
