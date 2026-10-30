@@ -1,6 +1,6 @@
 module studiocore
 
-go 1.25.10
+go 1.26.3
 
 require seedhammer.com v0.0.0
 
